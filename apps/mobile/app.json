@@ -5,7 +5,6 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "sem",
-    "userInterfaceStyle": "automatic",
     "android": {
       "package": "cloud.matzen.sem"
     },
