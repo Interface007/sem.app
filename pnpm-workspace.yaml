@@ -2,3 +2,8 @@ packages:
   - apps/*
   - packages/*
   - e2e/*
+
+# Install scripts are off by default; list each package explicitly.
+# esbuild's postinstall only verifies its platform binary, which tsx does not need.
+allowBuilds:
+  esbuild: false
