@@ -1,0 +1,4 @@
+# Rule files and CI belong to Sven; agents must not change them (AGENTS.md).
+/.github/                         @Interface007
+/AGENTS.md                        @Interface007
+/CLAUDE.md                        @Interface007
