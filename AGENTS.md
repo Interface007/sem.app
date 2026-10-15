@@ -23,8 +23,13 @@ Dokumentenscan, Backend als Container auf einer Synology-NAS im Heimnetz.
   Keine ML-/Inferenz-Bibliotheken auf dem Server.
 * **API-Verträge leben nur in `packages/contracts`.** App und Server
   importieren von dort; keine doppelt definierten Typen.
-* **Dateien für synOCR atomar schreiben**: erst temporärer Name im selben
-  Verzeichnis, dann Umbenennen.
+* **NAS-Zugriff nur über die Schnittstelle `NasGateway`** (File Station API in
+  Produktion, lokales Dateisystem in Tests). Nie direkt auf Pfade oder die
+  DSM-API zugreifen. Agents und Tests arbeiten nie gegen ein echtes NAS.
+* **Dateien atomar ablegen**: erst `.<uuid>.part` im Zielordner, dann
+  Umbenennen.
+* **Passwörter nie speichern oder protokollieren.** Gespeichert wird nur die
+  DSM-Sitzung.
 * **Der Haus-Viewer ist ein fremdes Artefakt** aus dem Repo `home`. Nicht
   nachbauen, nicht verändern — nur einbetten (iframe bzw. WebView) und über
   das `postMessage`-Protokoll in `packages/contracts` ansprechen.
@@ -38,7 +43,10 @@ Dokumentenscan, Backend als Container auf einer Synology-NAS im Heimnetz.
   `.github/copilot-instructions.md`, `CODEOWNERS`
 * Secrets, Branch-Protection, Repository-Einstellungen
 
-Wird eine Änderung dort nötig: im PR beschreiben, nicht selbst durchführen.
+Das gilt uneingeschränkt für **unbeaufsichtigte Factory-Läufe**: Wird eine
+Änderung dort nötig, im PR beschreiben, nicht selbst durchführen. In einer
+**interaktiven Sitzung** mit Sven nur auf seine ausdrückliche Anweisung
+(z. B. beim Aufbau in Phase 1).
 
 ## Arbeitsweise
 
