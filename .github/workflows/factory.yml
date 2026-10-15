@@ -1,0 +1,84 @@
+name: Factory
+
+# Issue labeled "factory" -> agent -> pull request. One run at a time.
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number
+        required: true
+      agent:
+        description: Agent
+        type: choice
+        options: [claude, copilot]
+        default: claude
+
+concurrency:
+  group: factory
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  run:
+    name: Agent
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'factory'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ISSUE: ${{ inputs.issue || github.event.issue.number }}
+      AGENT: ${{ inputs.agent || 'claude' }}
+      # PRs opened with GITHUB_TOKEN trigger no workflows, so the gates would
+      # never run. FACTORY_TOKEN: fine-grained PAT (contents, pull requests,
+      # issues: write) for this repository only.
+      GH_TOKEN: ${{ secrets.FACTORY_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.FACTORY_TOKEN || github.token }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install agent
+        run: |
+          if [[ "$AGENT" == "claude" ]]; then
+            npm install -g @anthropic-ai/claude-code@2.1.300
+          else
+            npm install -g @github/copilot
+          fi
+
+      - name: Run agent
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          git config user.name "sem-factory"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tools/run-agent --issue "$ISSUE" --agent "$AGENT" \
+            --max-turns 60 --fix-rounds 2 \
+            --metrics "$RUNNER_TEMP/factory-metrics.jsonl"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: factory-metrics-issue-${{ env.ISSUE }}-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-metrics.jsonl
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Report failure on the issue
+        if: failure()
+        run: >
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body
+          "Factory-Lauf fehlgeschlagen: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

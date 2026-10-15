@@ -1,0 +1,62 @@
+name: Holdout
+
+# Acceptance scenarios from the private repo sem.app-holdout, which coding
+# agents cannot read. They run against the built image (local NasGateway).
+# Contract with the holdout repo: an executable run.sh that takes the base
+# URL of the running server as SEM_BASE_URL and exits non-zero on failure.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: holdout-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  holdout:
+    name: Holdout scenarios
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      HAS_TOKEN: ${{ secrets.HOLDOUT_READ_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check out holdout scenarios
+        if: env.HAS_TOKEN == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: Interface007/sem.app-holdout
+          token: ${{ secrets.HOLDOUT_READ_TOKEN }}
+          path: .holdout
+          persist-credentials: false
+
+      - name: Build and start image
+        if: env.HAS_TOKEN == 'true' && hashFiles('.holdout/run.sh') != ''
+        run: |
+          docker build -f apps/server/Dockerfile --platform linux/amd64 -t sem-server:holdout .
+          docker run -d --name sem-server -p 127.0.0.1:8080:8080 sem-server:holdout
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health && exit 0
+            sleep 1
+          done
+          docker logs sem-server
+          exit 1
+
+      - name: Run scenarios
+        if: env.HAS_TOKEN == 'true'
+        env:
+          SEM_BASE_URL: http://127.0.0.1:8080
+        run: |
+          if [[ ! -f .holdout/run.sh ]]; then
+            echo "::notice::sem.app-holdout has no run.sh yet - no scenarios to run."
+            exit 0
+          fi
+          bash .holdout/run.sh
+
+      - name: No token
+        if: env.HAS_TOKEN != 'true'
+        run: echo "::notice::HOLDOUT_READ_TOKEN not available (e.g. fork PR) - skipped."
