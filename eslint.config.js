@@ -14,6 +14,7 @@ export default tseslint.config(
       '**/web-build/',
       '**/playwright-report/',
       '**/test-results/',
+      '**/expo-env.d.ts',
     ],
   },
   js.configs.recommended,
@@ -25,6 +26,12 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['apps/mobile/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: { ...globals.browser },
     },
   },
   prettier,

@@ -9,10 +9,13 @@ export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> & {
 };
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
-  const app = Fastify({ logger: { level: config.logLevel ?? 'silent' } });
+  const logLevel = config.logLevel ?? 'silent';
+  const app = Fastify({ logger: { level: logLevel } });
 
-  // The container health check polls this every 30 s; keep it out of the log.
-  app.get('/health', { logLevel: 'warn' }, async () =>
+  // The container health check polls this every 30 s; keep its requests out
+  // of the log, but never log more than configured.
+  const quiet = ['error', 'fatal', 'silent'].includes(logLevel) ? logLevel : 'warn';
+  app.get('/health', { logLevel: quiet }, async () =>
     Health.parse({ status: 'ok', version: config.version, commit: config.commit }),
   );
 

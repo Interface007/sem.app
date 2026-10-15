@@ -11,7 +11,8 @@
     "lint": "eslint . --max-warnings 0 && prettier --check .",
     "format": "prettier --write .",
     "test": "pnpm -r --if-present test",
-    "build": "pnpm -r --if-present build"
+    "build": "pnpm -r --if-present build",
+    "e2e": "pnpm --filter @sem/e2e-web e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

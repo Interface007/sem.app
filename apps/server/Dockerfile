@@ -20,16 +20,26 @@ COPY apps/server apps/server
 RUN pnpm --filter @sem/server... build \
  && pnpm --filter @sem/server deploy --prod --legacy /out
 
+FROM base AS web
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/contracts/package.json packages/contracts/
+COPY apps/mobile/package.json apps/mobile/
+RUN pnpm install --frozen-lockfile --filter @sem/mobile...
+COPY packages/contracts packages/contracts
+COPY apps/mobile apps/mobile
+RUN pnpm --filter @sem/mobile... build
+
 FROM ${NODE_IMAGE} AS runtime
 ARG APP_VERSION=0.0.0-dev
 ARG GIT_COMMIT=unknown
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
-    PORT=8080 \
+    PORT=8080     WEB_ROOT=/app/web \
     APP_VERSION=${APP_VERSION} \
     GIT_COMMIT=${GIT_COMMIT}
 WORKDIR /app
 COPY --from=build --chown=root:root /out ./
+COPY --from=web --chown=root:root /repo/apps/mobile/dist ./web
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
