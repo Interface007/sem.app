@@ -29,10 +29,10 @@ jobs:
       - name: Probe holdout repo
         if: env.HAS_TOKEN == 'true'
         env:
-          TOKEN: ${{ secrets.HOLDOUT_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOLDOUT_READ_TOKEN }}
         run: |
-          refs="$(git ls-remote "https://x-access-token:${TOKEN}@github.com/Interface007/sem.app-holdout.git" HEAD)"
-          if [[ -z "$refs" ]]; then
+          size="$(gh api repos/Interface007/sem.app-holdout --jq .size)"
+          if [[ "$size" == "0" ]]; then
             echo "::notice::sem.app-holdout is empty - no scenarios to run."
             echo "HAS_TOKEN=empty" >> "$GITHUB_ENV"
           fi
