@@ -30,6 +30,7 @@ COPY apps/mobile apps/mobile
 RUN pnpm --filter @sem/mobile... build
 
 FROM ${NODE_IMAGE} AS runtime
+LABEL org.opencontainers.image.source="https://github.com/Interface007/sem.app"       org.opencontainers.image.description="sem-server: API and web version of sem.app"
 ARG APP_VERSION=0.0.0-dev
 ARG GIT_COMMIT=unknown
 ENV NODE_ENV=production \

@@ -37,3 +37,22 @@ pnpm build
 ```
 
 `pnpm format` formatiert alle Dateien mit Prettier.
+
+E2E-Tests der Web-Version (vorher `pnpm build`):
+
+```sh
+pnpm --filter @sem/e2e-web exec playwright install chromium
+pnpm e2e
+```
+
+## Server-Image
+
+```sh
+docker build -f apps/server/Dockerfile --platform linux/amd64 -t sem-server .
+docker run --rm -p 8080:8080 sem-server
+tools/avx-smoke/run.sh sem-server   # startet das Image unter QEMU ohne AVX
+```
+
+Die NAS (Celeron J4125) hat kein AVX. Der AVX-Smoke-Test in CI prüft, dass
+das Image dort startet; ein Gegentest belegt, dass eine AVX-Anweisung unter
+dem verwendeten CPU-Modell tatsächlich abbricht.
