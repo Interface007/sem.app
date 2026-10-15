@@ -27,6 +27,9 @@ COPY apps/mobile/package.json apps/mobile/
 RUN pnpm install --frozen-lockfile --filter @sem/mobile...
 COPY packages/contracts packages/contracts
 COPY apps/mobile apps/mobile
+# Shown in the app footer; .git is not part of the build context.
+ARG APP_VERSION=0.0.0-dev
+ARG GIT_COMMIT=unknown
 RUN pnpm --filter @sem/mobile... build
 
 FROM ${NODE_IMAGE} AS runtime

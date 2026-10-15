@@ -20,3 +20,9 @@ test('client-side routes load directly', async ({ page }) => {
 
   await expect(page.getByText('Dieser Bereich folgt in einer späteren Phase.')).toBeVisible();
 });
+
+test('footer shows the app version and commit', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByTestId('build-info')).toHaveText(/^Version \S+ \([0-9a-f]{7}\)$/);
+});
