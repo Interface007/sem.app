@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "sem",
+    "slug": "sem-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "sem",
+    "android": {
+      "package": "cloud.matzen.sem"
+    },
+    "web": {
+      "output": "single",
+      "bundler": "metro"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

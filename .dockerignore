@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/coverage
+**/.expo
+**/web-build
+**/android
+**/ios
+**/playwright-report
+**/test-results
+.git
+.github
+docs
+*.md
+!README.md

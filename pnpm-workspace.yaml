@@ -1,0 +1,35 @@
+packages:
+  - apps/*
+  - packages/*
+  - e2e/*
+
+# Install scripts are off by default; list each package explicitly.
+# esbuild's postinstall only verifies its platform binary, which tsx does not need.
+allowBuilds:
+  esbuild: false
+
+minimumReleaseAgeExclude:
+  - '@expo/cli@57.0.31'
+  - '@expo/metro-runtime@57.0.17'
+  - '@expo/prebuild-config@57.0.19'
+  - '@expo/router-server@57.0.13'
+  - '@expo/ui@57.0.25'
+  - babel-preset-expo@57.0.16
+  - expo-asset@57.0.20
+  - expo-constants@57.0.22
+  - expo-linking@57.0.13
+  - expo-modules-autolinking@57.0.16
+  - expo-modules-core@57.0.23
+  - expo-router@57.0.28
+  - expo@57.0.30
+
+# Peers are declared explicitly. Auto-installing would pull optional native
+# peers (e.g. react-native-worklets) in versions Expo does not support.
+autoInstallPeers: false
+
+# Align transitive React Native packages with the versions of Expo SDK 57
+# (same as `create-expo-app`); otherwise newer, unsupported ones are resolved.
+overrides:
+  '@react-native/metro-config': 0.86.3
+  react-native-reanimated: 4.5.1
+  react-native-worklets: 0.10.1

@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# Factory adapter: implements one GitHub issue with a coding agent and opens
+# a pull request. The agent only edits files and runs the local gates; branch,
+# commit, push and PR are done here, so every agent is treated the same.
+#
+#   tools/run-agent --issue <n> [--agent claude|copilot] [--max-turns <n>]
+#                   [--fix-rounds <n>] [--metrics <file>]
+#
+# Environment: GH_TOKEN (push + PR), GITHUB_REPOSITORY,
+#   claude:  CLAUDE_CODE_OAUTH_TOKEN, optional CLAUDE_MODEL
+#   copilot: COPILOT_GITHUB_TOKEN
+# Writes one JSON line with measurements (docs/architektur.md 10.5) to
+# --metrics, also when the run fails.
+set -euo pipefail
+
+agent="claude"
+issue=""
+max_turns=60
+fix_rounds=2
+metrics="factory-metrics.jsonl"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --issue) issue="$2"; shift 2 ;;
+    --agent) agent="$2"; shift 2 ;;
+    --max-turns) max_turns="$2"; shift 2 ;;
+    --fix-rounds) fix_rounds="$2"; shift 2 ;;
+    --metrics) metrics="$2"; shift 2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+[[ "$issue" =~ ^[0-9]+$ ]] || { echo "--issue <number> is required" >&2; exit 2; }
+[[ "$agent" == "claude" || "$agent" == "copilot" ]] || { echo "unknown agent: $agent" >&2; exit 2; }
+
+repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
+branch="factory/issue-$issue"
+work="$(mktemp -d)"
+started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+start_s=$SECONDS
+
+# Measurements, filled in as the run goes.
+model=""
+cost=0
+input_tokens=0
+output_tokens=0
+turns=0
+rounds=0
+gates="not-run"
+outcome="error"
+pr_url=""
+session=""
+
+write_metrics() {
+  jq -nc \
+    --arg issue "$issue" --arg agent "$agent" --arg model "$model" \
+    --arg started "$started" --argjson duration $((SECONDS - start_s)) \
+    --argjson cost "$cost" --argjson input "$input_tokens" --argjson output "$output_tokens" \
+    --argjson turns "$turns" --argjson rounds "$rounds" \
+    --arg gates "$gates" --arg outcome "$outcome" --arg pr "$pr_url" \
+    --arg run "${GITHUB_SERVER_URL:-}/${repo}/actions/runs/${GITHUB_RUN_ID:-}" \
+    '{issue: ($issue | tonumber), agent: $agent, model: $model, started: $started,
+      duration_s: $duration, cost_usd: $cost, input_tokens: $input, output_tokens: $output,
+      turns: $turns, fix_rounds: $rounds, local_gates: $gates, outcome: $outcome,
+      pr: $pr, run: $run, human_intervention: null}' >> "$metrics"
+}
+trap 'write_metrics; rm -rf "$work"' EXIT
+
+gh issue view "$issue" --repo "$repo" --json title,body,url > "$work/issue.json"
+title="$(jq -r .title "$work/issue.json")"
+
+cat > "$work/prompt.md" <<EOF
+Setze das folgende GitHub-Issue in diesem Repository um.
+
+Lies zuerst AGENTS.md vollständig und halte dich an alle Regeln dort.
+Ändere nie .github/, AGENTS.md, CLAUDE.md oder CODEOWNERS.
+Lege keine Commits und Branches an; das übernimmt das aufrufende Skript.
+Zum Abschluss müssen \`pnpm typecheck && pnpm lint && pnpm test\` fehlerfrei
+durchlaufen. Neue Funktion = neuer Test.
+Ist das Issue unklar, ändere nichts und erkläre in deiner letzten Antwort, was fehlt.
+Deine letzte Antwort wird als PR-Beschreibung verwendet: was, warum, wie getestet.
+
+# Issue #$issue: $title
+
+$(jq -r .body "$work/issue.json")
+EOF
+
+# Adds the measurements of one claude JSON result to the totals.
+account_claude() {
+  local result="$1"
+  session="$(jq -r '.session_id // empty' "$result")"
+  model="$(jq -r '(.modelUsage // {}) | keys | join(",")' "$result")"
+  cost="$(jq -n --argjson a "$cost" --argjson b "$(jq '.total_cost_usd // 0' "$result")" '$a + $b')"
+  input_tokens=$((input_tokens + $(jq '[.usage | (.input_tokens // 0), (.cache_creation_input_tokens // 0), (.cache_read_input_tokens // 0)] | add' "$result")))
+  output_tokens=$((output_tokens + $(jq '.usage.output_tokens // 0' "$result")))
+  turns=$((turns + $(jq '.num_turns // 0' "$result")))
+}
+
+# run_agent <prompt file> <result file>; continues the previous session if any.
+run_agent() {
+  local prompt="$1" result="$2" status=0
+  case "$agent" in
+    claude)
+      local args=(-p --output-format json --max-turns "$max_turns"
+        --permission-mode acceptEdits
+        --allowedTools "Read" "Edit" "Write" "Glob" "Grep"
+        "Bash(pnpm *)" "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(ls *)")
+      [[ -n "${CLAUDE_MODEL:-}" ]] && args+=(--model "$CLAUDE_MODEL")
+      [[ -n "$session" ]] && args+=(--resume "$session")
+      claude "${args[@]}" < "$prompt" > "$result" || status=$?
+      if jq -e . "$result" > /dev/null 2>&1; then
+        account_claude "$result"
+        jq -r '.result // ""' "$result" > "$work/summary.md"
+      fi
+      ;;
+    copilot)
+      # Copilot CLI has no machine-readable cost output; tokens stay 0.
+      model="copilot"
+      copilot -p "$(cat "$prompt")" --no-ask-user --allow-all-tools > "$result" || status=$?
+      cp "$result" "$work/summary.md"
+      ;;
+  esac
+  return "$status"
+}
+
+git switch -C "$branch"
+
+run_agent "$work/prompt.md" "$work/result-0.json" || echo "agent exited with an error" >&2
+
+while true; do
+  if pnpm typecheck > "$work/gates.log" 2>&1 && pnpm lint >> "$work/gates.log" 2>&1 &&
+    pnpm test >> "$work/gates.log" 2>&1; then
+    gates="pass"
+    break
+  fi
+  gates="fail"
+  if (( rounds >= fix_rounds )); then break; fi
+  rounds=$((rounds + 1))
+  {
+    echo "Die lokalen Gates schlagen fehl. Behebe die Ursache, ohne Tests, Typen oder"
+    echo "Lint-Regeln abzuschwächen. Ende der Ausgabe:"
+    echo
+    echo '```'
+    tail -n 150 "$work/gates.log"
+    echo '```'
+  } > "$work/fix.md"
+  run_agent "$work/fix.md" "$work/result-$rounds.json" || echo "agent exited with an error" >&2
+done
+
+if [[ -z "$(git status --porcelain)" ]]; then
+  outcome="no-changes"
+  echo "The agent made no changes." >&2
+  exit 1
+fi
+
+protected="$(git status --porcelain | cut -c4- | grep -E '^(\.github/|AGENTS\.md$|CLAUDE\.md$|CODEOWNERS$)' || true)"
+if [[ -n "$protected" ]]; then
+  outcome="protected-paths"
+  echo "The agent changed protected paths:" >&2
+  echo "$protected" >&2
+  exit 1
+fi
+
+git add -A
+git commit -q -F - <<EOF
+$title
+
+Implements #$issue via the factory ($agent).
+EOF
+git push --force-with-lease -u origin "$branch"
+
+{
+  cat "$work/summary.md" 2>/dev/null || true
+  echo
+  echo "---"
+  echo "Closes #$issue"
+  echo
+  echo "Factory: agent \`$agent\`, Fix-Runden $rounds, lokale Gates: **$gates**."
+} > "$work/pr.md"
+
+pr_url="$(gh pr list --repo "$repo" --head "$branch" --json url --jq '.[0].url // empty')"
+if [[ -z "$pr_url" ]]; then
+  pr_url="$(gh pr create --repo "$repo" --head "$branch" --title "$title" \
+    --body-file "$work/pr.md" --label factory)"
+else
+  gh pr edit "$pr_url" --body-file "$work/pr.md" > /dev/null
+fi
+echo "PR: $pr_url"
+
+if [[ "$gates" == "pass" ]]; then outcome="pr"; else outcome="pr-gates-failing"; exit 1; fi

@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/interface007/sem-server
+
+jobs:
+  verify:
+    name: Typecheck, lint, unit, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  image:
+    name: Image, E2E web, AVX smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build image
+        run: |
+          version="$(git describe --tags --always)"
+          docker build -f apps/server/Dockerfile --platform linux/amd64 \
+            --build-arg APP_VERSION="$version" \
+            --build-arg GIT_COMMIT="${GITHUB_SHA::7}" \
+            -t sem-server:ci .
+
+      - name: Start container
+        run: |
+          docker run -d --name sem-server -p 127.0.0.1:8080:8080 sem-server:ci
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health && exit 0
+            sleep 1
+          done
+          docker logs sem-server
+          exit 1
+
+      - name: E2E web (Playwright against the container)
+        run: |
+          pnpm --filter @sem/e2e-web exec playwright install --with-deps chromium
+          pnpm e2e
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/web/playwright-report
+          retention-days: 7
+
+      - name: AVX smoke (QEMU, CPU without AVX)
+        run: tools/avx-smoke/run.sh sem-server:ci
+
+      - name: Push to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for tag in "sha-${GITHUB_SHA::7}" latest; do
+            docker tag sem-server:ci "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          done

@@ -1,0 +1,39 @@
+name: Guard
+
+# Fails pull requests labeled "factory" that touch rule files or CI.
+# Runs on every PR so it can be a required status check.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  protected-paths:
+    name: Protected paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_FACTORY: ${{ contains(github.event.pull_request.labels.*.name, 'factory') }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [[ "$IS_FACTORY" != "true" ]]; then
+            echo "No factory label - nothing to check."
+            exit 0
+          fi
+          # Old and new names, so renames out of a protected path count too.
+          gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' > files.txt
+          if grep -E '^(\.github/|AGENTS\.md$|CLAUDE\.md$|CODEOWNERS$)' files.txt > blocked.txt; then
+            echo "::error::Factory PRs must not change these protected paths:"
+            sed 's/^/  /' blocked.txt
+            echo "Describe the needed change in the PR instead (see AGENTS.md)."
+            exit 1
+          fi
+          echo "No protected paths changed ($(wc -l < files.txt) files checked)."
