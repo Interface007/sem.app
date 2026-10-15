@@ -25,6 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Fails on a bad token; an empty repo (no scenarios yet) only skips.
+      - name: Probe holdout repo
+        if: env.HAS_TOKEN == 'true'
+        env:
+          TOKEN: ${{ secrets.HOLDOUT_READ_TOKEN }}
+        run: |
+          refs="$(git ls-remote "https://x-access-token:${TOKEN}@github.com/Interface007/sem.app-holdout.git" HEAD)"
+          if [[ -z "$refs" ]]; then
+            echo "::notice::sem.app-holdout is empty - no scenarios to run."
+            echo "HAS_TOKEN=empty" >> "$GITHUB_ENV"
+          fi
+
       - name: Check out holdout scenarios
         if: env.HAS_TOKEN == 'true'
         uses: actions/checkout@v7
@@ -58,5 +70,5 @@ jobs:
           bash .holdout/run.sh
 
       - name: No token
-        if: env.HAS_TOKEN != 'true'
+        if: env.HAS_TOKEN == 'false'
         run: echo "::notice::HOLDOUT_READ_TOKEN not available (e.g. fork PR) - skipped."
