@@ -1,11 +1,24 @@
 // Lets the config load TypeScript plugins (see Expo docs on app.config.ts).
 import 'tsx/cjs';
+import { execSync } from 'node:child_process';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 import { withReleaseSigning } from './plugins/release-signing';
 
+/** Short commit hash of the checkout, `unknown` outside a git repository. */
+function gitCommit(): string {
+  try {
+    return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
 /*
  * Static settings live in app.json. Values set at build time:
- *   APP_VERSION           version name, e.g. 0.1.0 (CI: from the tag)
+ *   GIT_COMMIT           short commit hash shown in the footer (default: git)
+ *   APP_VERSION         version name, e.g. 0.1.0 (CI: from the tag)
  *   ANDROID_VERSION_CODE  must grow with every release, otherwise
  *                         `adb install -r` refuses the update
  */
@@ -21,5 +34,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? 'sem-app',
     version: process.env.APP_VERSION ?? config.version ?? '0.0.0',
     android: { ...config.android, versionCode },
+    extra: { ...config.extra, gitCommit: process.env.GIT_COMMIT || gitCommit() },
   });
 };
