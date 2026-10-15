@@ -60,3 +60,4 @@ Das gilt uneingeschränkt für **unbeaufsichtigte Factory-Läufe**: Wird eine
 
 * Code, Bezeichner und Commit-Nachrichten: Englisch.
 * Oberflächentexte der App und Dokumentation: Deutsch mit echten Umlauten.
+
