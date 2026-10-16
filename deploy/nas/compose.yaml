@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     ports:
       # links: Port auf der NAS (frei wählbar), rechts: Port im Container
-      - "8085:8080"
+      - '8085:8080'
     environment:
       LOG_LEVEL: info
     # Härtung: Der Server braucht derzeit weder Schreibrechte noch Privilegien.

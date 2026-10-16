@@ -1,6 +1,6 @@
 name: Factory-Auftrag
 description: Ein Feature oder Fix, den die Factory umsetzen soll
-title: "<kurz, im Imperativ: Was soll die App können?>"
+title: '<kurz, im Imperativ: Was soll die App können?>'
 body:
   - type: textarea
     id: ziel
