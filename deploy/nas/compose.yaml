@@ -1,0 +1,20 @@
+# sem-server auf der Synology DS225+ (Container Manager → Projekt).
+# Anleitung: docs/betrieb-nas.md
+services:
+  sem-server:
+    image: ghcr.io/interface007/sem-server:latest
+    container_name: sem-server
+    restart: unless-stopped
+    ports:
+      # links: Port auf der NAS (frei wählbar), rechts: Port im Container
+      - '8085:8080'
+    environment:
+      LOG_LEVEL: info
+    # Härtung: Der Server braucht derzeit weder Schreibrechte noch Privilegien.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

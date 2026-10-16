@@ -70,8 +70,10 @@ Web), .NET MAUI (kleineres Ökosystem, kein vollwertiges Web-Ziel), reine PWA
 ```
 
 * `sem-server` liefert API **und** die Web-Version der App aus. Ein Container.
-* HTTPS über den DSM-Reverse-Proxy mit Zertifikat (Pflicht für sicheren
-  Kontext im Browser: Kamera, Service Worker).
+* HTTPS über den DSM-Reverse-Proxy unter `https://sem.matzen.familyds.net`
+  (Platzhalter-Zertifikat der Synology-DDNS-Adresse, Zugriffsprofil nur
+  Heimnetz und VPN). Pflicht für sicheren Kontext im Browser: Kamera,
+  Service Worker. Details: `docs/betrieb-nas.md`.
 * Der Container braucht **keine** Schreib-Mounts auf Nutzerdaten. Alle
   Dateizugriffe laufen über die File Station API mit der Sitzung des
   angemeldeten DSM-Benutzers (siehe 6).
@@ -321,7 +323,5 @@ des Abos erreicht wurde.
 
 ## 12. Offene Fragen
 
-* Hostname für `sem-server` im Heimnetz und über VPN (interner DNS-Eintrag
-  auf dem UCG-Max, Zertifikat).
 * Ist für den DSM-Benutzer 2FA aktiv? Davon hängt der OTP-Dialog ab.
 * Synology Drive oder SMB als Weg vom PC zum Viewer-Ordner?
