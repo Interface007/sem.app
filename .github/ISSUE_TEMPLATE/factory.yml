@@ -1,0 +1,31 @@
+name: Factory-Auftrag
+description: Ein Feature oder Fix, den die Factory umsetzen soll
+title: "<kurz, im Imperativ: Was soll die App können?>"
+body:
+  - type: textarea
+    id: ziel
+    attributes:
+      label: Ziel
+      description: Was soll danach möglich sein, und warum? Zwei, drei Sätze.
+    validations:
+      required: true
+  - type: textarea
+    id: abnahme
+    attributes:
+      label: Abnahmekriterien
+      description: Prüfbar formuliert, je Zeile ein Kriterium. Daraus entstehen die Tests.
+      placeholder: |
+        - [ ] Wenn …, dann …
+        - [ ] …
+    validations:
+      required: true
+  - type: textarea
+    id: ausserhalb
+    attributes:
+      label: Nicht Teil dieses Auftrags
+      description: Was ausdrücklich NICHT gemacht werden soll (verhindert Ausufern).
+  - type: textarea
+    id: hinweise
+    attributes:
+      label: Hinweise
+      description: Verweise auf docs/architektur.md, betroffene Pakete, Vorgaben.
