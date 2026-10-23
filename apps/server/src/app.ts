@@ -3,10 +3,12 @@ import fastifyStatic from '@fastify/static';
 import { Health } from '@sem/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from './config.js';
+import { registerUpdateRoutes } from './updates.js';
 
-export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> & {
-  logLevel?: Config['logLevel'];
-};
+export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
+  Partial<Pick<Config, 'updatesDir' | 'updatesPrivateKeyPath' | 'updatesBaseUrl'>> & {
+    logLevel?: Config['logLevel'];
+  };
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const logLevel = config.logLevel ?? 'silent';
@@ -18,6 +20,12 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   app.get('/health', { logLevel: quiet }, async () =>
     Health.parse({ status: 'ok', version: config.version, commit: config.commit }),
   );
+
+  registerUpdateRoutes(app, {
+    dir: config.updatesDir,
+    privateKeyPath: config.updatesPrivateKeyPath,
+    baseUrl: config.updatesBaseUrl,
+  });
 
   if (config.webRoot) {
     await app.register(fastifyStatic, {
