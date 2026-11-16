@@ -13,6 +13,7 @@ describe('loadConfig', () => {
       updatesBaseUrl: undefined,
       version: '0.0.0-dev',
       commit: 'unknown',
+      nas: { kind: 'none' },
     });
   });
 
@@ -39,6 +40,7 @@ describe('loadConfig', () => {
       updatesBaseUrl: 'https://sem.example',
       version: '0.1.0',
       commit: 'abc1234',
+      nas: { kind: 'none' },
     });
   });
 
@@ -46,6 +48,50 @@ describe('loadConfig', () => {
     expect(loadConfig({ WEB_ROOT: '', PORT: '' })).toMatchObject({
       webRoot: undefined,
       port: 8080,
+    });
+  });
+
+  describe('NAS gateway', () => {
+    it('selects dsm with a URL', () => {
+      expect(loadConfig({ NAS_GATEWAY: 'dsm', DSM_URL: 'http://172.17.0.1:5000' }).nas).toEqual({
+        kind: 'dsm',
+        url: 'http://172.17.0.1:5000',
+      });
+    });
+
+    it('selects local and parses users, keeping colons in passwords', () => {
+      expect(loadConfig({ NAS_GATEWAY: 'local', LOCAL_USERS: 'anna:geheim,Bob:a:b' }).nas).toEqual({
+        kind: 'local',
+        users: [
+          { account: 'anna', password: 'geheim' },
+          { account: 'Bob', password: 'a:b' },
+        ],
+      });
+    });
+
+    it('fails with a clear message for dsm without DSM_URL', () => {
+      expect(() => loadConfig({ NAS_GATEWAY: 'dsm' })).toThrow(
+        /DSM_URL is required when NAS_GATEWAY=dsm/,
+      );
+    });
+
+    it('fails with a clear message for local without LOCAL_USERS', () => {
+      expect(() => loadConfig({ NAS_GATEWAY: 'local' })).toThrow(
+        /LOCAL_USERS is required when NAS_GATEWAY=local/,
+      );
+    });
+
+    it('rejects malformed LOCAL_USERS without leaking the password', () => {
+      expect(() => loadConfig({ NAS_GATEWAY: 'local', LOCAL_USERS: 'secretpw,x:y' })).toThrow(
+        /LOCAL_USERS must look like/,
+      );
+      expect(() => loadConfig({ NAS_GATEWAY: 'local', LOCAL_USERS: 'secretpw,x:y' })).not.toThrow(
+        /secretpw/,
+      );
+    });
+
+    it('rejects an unknown gateway', () => {
+      expect(() => loadConfig({ NAS_GATEWAY: 'smb' })).toThrow(/Invalid configuration/);
     });
   });
 
