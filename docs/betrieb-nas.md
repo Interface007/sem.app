@@ -63,6 +63,38 @@ angezeigte Version und der Commit stehen in der Fußzeile der App und in
 **Zurückrollen:** in `compose.yaml` `latest` durch `sha-<commit>` einer
 früheren Version ersetzen, dann dieselben zwei Befehle.
 
+## Anmeldung am DSM
+
+`sem-server` kann DSM-Benutzer über `SYNO.API.Auth` anmelden (Sitzung
+`FileStation`). Gespeichert wird nur die DSM-Sitzung, nie das Passwort.
+Ohne die folgenden Variablen startet der Server trotzdem; Anmeldungen
+schlagen dann mit „nicht verfügbar“ fehl.
+
+| Variable | Bedeutung |
+|---|---|
+| `NAS_GATEWAY` | `dsm` (Betrieb) oder `local` (nur Tests/Entwicklung); leer = keine Anmeldung |
+| `DSM_URL` | Pflicht bei `dsm`, Adresse des DSM aus Sicht des Containers |
+| `LOCAL_USERS` | Pflicht bei `local`, `name:passwort,name2:passwort2` |
+
+Beispiel in `compose.yaml`:
+
+```yaml
+    environment:
+      NAS_GATEWAY: dsm
+      DSM_URL: http://172.17.0.1:5000
+```
+
+* `172.17.0.1` ist die Docker-Bridge der NAS; der Verkehr verlässt das Gerät
+  nicht. Bitte prüfen, dass der Container das DSM darüber erreicht.
+* Aus Sicht des DSM kommen alle Anmeldungen von der Container-Adresse.
+  Damit die automatische Blockierung nicht den Server aussperrt, die
+  Container-Adresse in DSM → Sicherheit → Schutz in die Zulassungsliste
+  aufnehmen.
+* Bei `https` mit selbstsigniertem Zertifikat schlägt die Prüfung fehl; die
+  Zertifikatsprüfung wird bewusst nicht abgeschaltet.
+* `local` ist nicht für den Betrieb gedacht; beim Start erscheint eine
+  Warnung im Log.
+
 ## HTTPS: `https://sem.matzen.familyds.net`
 
 Die NAS ist bereits über die Synology-DDNS-Adresse `matzen.familyds.net`

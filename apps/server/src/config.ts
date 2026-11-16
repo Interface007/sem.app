@@ -1,20 +1,73 @@
 import { z } from 'zod';
 
-const EnvSchema = z.object({
-  HOST: z.string().min(1).default('0.0.0.0'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(8080),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  /** Folder with the web export of the app; static serving is off if unset. */
-  WEB_ROOT: z.string().min(1).optional(),
-  /** Output folder of `expo export`; no updates are served if unset. */
-  UPDATES_DIR: z.string().min(1).optional(),
-  /** PEM file with the private key that signs update manifests. */
-  UPDATES_PRIVATE_KEY_PATH: z.string().min(1).optional(),
-  /** Public base URL used in asset URLs; derived from the request if unset. */
-  UPDATES_BASE_URL: z.url().optional(),
-  APP_VERSION: z.string().min(1).default('0.0.0-dev'),
-  GIT_COMMIT: z.string().min(1).default('unknown'),
-});
+interface LocalUserEntry {
+  account: string;
+  password: string;
+}
+
+/** `name:passwort,name2:passwort2`; the password may contain colons. */
+function parseLocalUsers(raw: string, ctx: z.RefinementCtx): LocalUserEntry[] {
+  const users: LocalUserEntry[] = [];
+  for (const entry of raw.split(',')) {
+    const separator = entry.indexOf(':');
+    const account = entry.slice(0, separator).trim();
+    const password = entry.slice(separator + 1);
+    if (separator < 1 || account === '' || password === '') {
+      // Never echo the entry: it contains a password.
+      ctx.addIssue({
+        code: 'custom',
+        message: 'LOCAL_USERS must look like name:password,name2:password2',
+      });
+      return z.NEVER;
+    }
+    users.push({ account, password });
+  }
+  return users;
+}
+
+const EnvSchema = z
+  .object({
+    HOST: z.string().min(1).default('0.0.0.0'),
+    PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+    /** Folder with the web export of the app; static serving is off if unset. */
+    WEB_ROOT: z.string().min(1).optional(),
+    /** Output folder of `expo export`; no updates are served if unset. */
+    UPDATES_DIR: z.string().min(1).optional(),
+    /** PEM file with the private key that signs update manifests. */
+    UPDATES_PRIVATE_KEY_PATH: z.string().min(1).optional(),
+    /** Public base URL used in asset URLs; derived from the request if unset. */
+    UPDATES_BASE_URL: z.url().optional(),
+    APP_VERSION: z.string().min(1).default('0.0.0-dev'),
+    GIT_COMMIT: z.string().min(1).default('unknown'),
+    /** NAS access; no gateway (login always unavailable) if unset. */
+    NAS_GATEWAY: z.enum(['dsm', 'local']).optional(),
+    /** Base URL of the DSM, e.g. http://172.17.0.1:5000 (required for `dsm`). */
+    DSM_URL: z.url({ protocol: /^https?$/ }).optional(),
+    /** Users for the `local` gateway, `name:passwort,name2:passwort2`. */
+    LOCAL_USERS: z.string().min(1).transform(parseLocalUsers).optional(),
+  })
+  .superRefine((env, ctx) => {
+    if (env.NAS_GATEWAY === 'dsm' && env.DSM_URL === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DSM_URL'],
+        message: 'DSM_URL is required when NAS_GATEWAY=dsm',
+      });
+    }
+    if (env.NAS_GATEWAY === 'local' && env.LOCAL_USERS === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['LOCAL_USERS'],
+        message: 'LOCAL_USERS is required when NAS_GATEWAY=local',
+      });
+    }
+  });
+
+export type NasConfig =
+  { kind: 'none' } | { kind: 'dsm'; url: string } | { kind: 'local'; users: LocalUserEntry[] };
 
 export interface Config {
   host: string;
@@ -26,6 +79,7 @@ export interface Config {
   updatesBaseUrl: string | undefined;
   version: string;
   commit: string;
+  nas: NasConfig;
 }
 
 /** Reads the configuration from environment variables; throws on invalid values. */
@@ -37,6 +91,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`Invalid configuration:\n${z.prettifyError(result.error)}`);
   }
   const e = result.data;
+  let nas: NasConfig = { kind: 'none' };
+  if (e.NAS_GATEWAY === 'dsm' && e.DSM_URL !== undefined) nas = { kind: 'dsm', url: e.DSM_URL };
+  if (e.NAS_GATEWAY === 'local' && e.LOCAL_USERS !== undefined)
+    nas = { kind: 'local', users: e.LOCAL_USERS };
   return {
     host: e.HOST,
     port: e.PORT,
@@ -47,5 +105,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     updatesBaseUrl: e.UPDATES_BASE_URL,
     version: e.APP_VERSION,
     commit: e.GIT_COMMIT,
+    nas,
   };
 }
