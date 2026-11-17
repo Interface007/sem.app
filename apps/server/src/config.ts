@@ -48,6 +48,15 @@ const EnvSchema = z
     DSM_URL: z.url({ protocol: /^https?$/ }).optional(),
     /** Users for the `local` gateway, `name:passwort,name2:passwort2`. */
     LOCAL_USERS: z.string().min(1).transform(parseLocalUsers).optional(),
+    /** Folder for `sem.db`; sessions are kept in memory only if unset. */
+    DATA_DIR: z.string().min(1).optional(),
+    /** Days without use until an app session expires. */
+    SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
+    /** Honour `X-Forwarded-*` (set behind the DSM reverse proxy). */
+    TRUST_PROXY: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
   })
   .superRefine((env, ctx) => {
     if (env.NAS_GATEWAY === 'dsm' && env.DSM_URL === undefined) {
@@ -80,6 +89,9 @@ export interface Config {
   version: string;
   commit: string;
   nas: NasConfig;
+  dataDir: string | undefined;
+  sessionTtlDays: number;
+  trustProxy: boolean;
 }
 
 /** Reads the configuration from environment variables; throws on invalid values. */
@@ -106,5 +118,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     version: e.APP_VERSION,
     commit: e.GIT_COMMIT,
     nas,
+    dataDir: e.DATA_DIR,
+    sessionTtlDays: e.SESSION_TTL_DAYS,
+    trustProxy: e.TRUST_PROXY,
   };
 }

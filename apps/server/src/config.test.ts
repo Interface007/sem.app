@@ -14,8 +14,24 @@ describe('loadConfig', () => {
       version: '0.0.0-dev',
       commit: 'unknown',
       nas: { kind: 'none' },
+      dataDir: undefined,
+      sessionTtlDays: 30,
+      trustProxy: false,
     });
   });
+
+  it('reads session settings', () => {
+    expect(
+      loadConfig({ DATA_DIR: '/data', SESSION_TTL_DAYS: '7', TRUST_PROXY: 'true' }),
+    ).toMatchObject({ dataDir: '/data', sessionTtlDays: 7, trustProxy: true });
+  });
+
+  it.each([{ SESSION_TTL_DAYS: '0' }, { SESSION_TTL_DAYS: 'x' }, { TRUST_PROXY: 'yes' }])(
+    'rejects invalid session settings %j',
+    (env) => {
+      expect(() => loadConfig(env)).toThrow(/Invalid configuration/);
+    },
+  );
 
   it('reads all values from the environment', () => {
     expect(
@@ -41,6 +57,9 @@ describe('loadConfig', () => {
       version: '0.1.0',
       commit: 'abc1234',
       nas: { kind: 'none' },
+      dataDir: undefined,
+      sessionTtlDays: 30,
+      trustProxy: false,
     });
   });
 

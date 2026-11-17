@@ -2,17 +2,66 @@ import path from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { Health } from '@sem/contracts';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { registerAuth, sendError } from './auth/routes.js';
+import { SessionService } from './auth/session-service.js';
 import type { Config } from './config.js';
+import { SqliteSessionStore, type SessionStore } from './db/sessions.js';
+import { UnconfiguredNasGateway, type NasGateway } from './nas/index.js';
 import { registerUpdateRoutes } from './updates.js';
 
 export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
-  Partial<Pick<Config, 'updatesDir' | 'updatesPrivateKeyPath' | 'updatesBaseUrl'>> & {
+  Partial<
+    Pick<
+      Config,
+      'updatesDir' | 'updatesPrivateKeyPath' | 'updatesBaseUrl' | 'sessionTtlDays' | 'trustProxy'
+    >
+  > & {
     logLevel?: Config['logLevel'];
   };
 
-export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
+export interface AppDeps {
+  nasGateway?: NasGateway;
+  /** Closed together with the app. In-memory if omitted. */
+  sessionStore?: SessionStore;
+  /** Milliseconds since the epoch. */
+  now?: () => number;
+  /** Destination of the log output; stdout if omitted. */
+  logStream?: { write(message: string): void };
+}
+
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<FastifyInstance> {
   const logLevel = config.logLevel ?? 'silent';
-  const app = Fastify({ logger: { level: logLevel } });
+  const app = Fastify({
+    logger:
+      deps.logStream === undefined
+        ? { level: logLevel }
+        : { level: logLevel, stream: deps.logStream },
+    trustProxy: config.trustProxy ?? false,
+  });
+
+  // Uniform error format below /api; everything else keeps Fastify's default.
+  app.setErrorHandler((error, request, reply) => {
+    const status = (error as { statusCode?: number }).statusCode ?? 500;
+    if (request.url.startsWith('/api/') && status >= 400 && status < 500) {
+      return sendError(reply, 400, 'invalid_request');
+    }
+    return reply.send(error);
+  });
+
+  const now = deps.now ?? Date.now;
+  const store = deps.sessionStore ?? new SqliteSessionStore(':memory:');
+  const sessions = new SessionService(store, now, config.sessionTtlDays ?? 30);
+  sessions.deleteExpired();
+  const cleanup = setInterval(() => {
+    sessions.deleteExpired();
+  }, CLEANUP_INTERVAL_MS);
+  cleanup.unref();
+  app.addHook('onClose', async () => {
+    clearInterval(cleanup);
+    store.close();
+  });
 
   // The container health check polls this every 30 s; keep its requests out
   // of the log, but never log more than configured.
@@ -20,6 +69,8 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   app.get('/health', { logLevel: quiet }, async () =>
     Health.parse({ status: 'ok', version: config.version, commit: config.commit }),
   );
+
+  registerAuth(app, { nasGateway: deps.nasGateway ?? new UnconfiguredNasGateway(), sessions, now });
 
   registerUpdateRoutes(app, {
     dir: config.updatesDir,

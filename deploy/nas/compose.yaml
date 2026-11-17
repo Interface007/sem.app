@@ -10,13 +10,22 @@ services:
       - '8085:8080'
     environment:
       LOG_LEVEL: info
+      # Sitzungen (SQLite-Datei sem.db) liegen im Volume /data.
+      DATA_DIR: /data
+      # Hinter dem DSM-Reverse-Proxy zählt X-Forwarded-Proto (Cookie „Secure“).
+      TRUST_PROXY: 'true'
+      # Tage ohne Nutzung bis eine Sitzung abläuft (Vorgabe 30):
+      # SESSION_TTL_DAYS: 30
       # Anmeldung am DSM (siehe docs/betrieb-nas.md, „Anmeldung am DSM“):
       # NAS_GATEWAY: dsm
       # DSM_URL: http://172.17.0.1:5000
       # Nur für Tests/Entwicklung, nicht im Betrieb:
       # NAS_GATEWAY: local
       # LOCAL_USERS: anna:passwort,ben:passwort2
-    # Härtung: Der Server braucht derzeit weder Schreibrechte noch Privilegien.
+    volumes:
+      # Der Ordner muss für UID 1000 (Benutzer „node“) beschreibbar sein.
+      - ./data:/data
+    # Härtung: Außer /data braucht der Server keine Schreibrechte.
     read_only: true
     tmpfs:
       - /tmp
