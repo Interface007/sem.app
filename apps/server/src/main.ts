@@ -1,12 +1,19 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { openSessionStore } from './db/sessions.js';
 import { createNasGateway } from './nas/index.js';
 
 const config = loadConfig();
-const app = await buildApp(config);
 
-// Not wired into the app yet (login routes follow); creating it logs the warning for `local`.
-createNasGateway(config, app.log);
+// The logger only exists once the app is built; keep early warnings for it.
+const warnings: string[] = [];
+const collector = { warn: (message: string) => warnings.push(message) };
+
+const app = await buildApp(config, {
+  nasGateway: createNasGateway(config, collector),
+  sessionStore: openSessionStore(config.dataDir, collector),
+});
+for (const message of warnings) app.log.warn(message);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {

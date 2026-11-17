@@ -166,8 +166,19 @@ Vorarbeiten im `home`-Repo (dort umzusetzen, nicht in sem.app):
   beschreibt nur Freigaben, die ihm in DSM erlaubt sind.
 * Das Merken eines Geräts, damit nicht bei jeder Anmeldung ein OTP nötig ist,
   sieht die API vor (Geräte-Token). Im Gerüst verifizieren.
-* App-Sitzung: eigenes, kurzlebiges Token von `sem-server` (httpOnly-Cookie im
-  Browser, sicherer Speicher auf Android).
+* App-Sitzung: eigenes Token von `sem-server` (httpOnly-Cookie im Browser,
+  sicherer Speicher auf Android, dort als `Authorization: Bearer`).
+  Sitzungsmodell: undurchsichtiges Zufallstoken (32 Byte, base64url), kein
+  JWT, damit Sitzungen serverseitig widerrufbar sind. In SQLite
+  (`node:sqlite`, `${DATA_DIR}/sem.db`) liegen nur der SHA-256-Hash des
+  Tokens, Benutzername, DSM-`sid` und Zeitstempel. Die Laufzeit ist gleitend
+  (Vorgabe 30 Tage ohne Nutzung, `SESSION_TTL_DAYS`), weil die App im
+  Hintergrund Standorte sendet und sich ohne gespeichertes Passwort nicht
+  selbst neu anmelden kann; die Verlängerung wird höchstens stündlich
+  geschrieben. Abmelden widerruft sofort. Fehlversuche je Benutzername werden
+  begrenzt (5 in 10 Minuten). Geschützte Routen nutzen `app.requireSession`;
+  Fehler haben überall das Format `ApiError`. Ein zwischenzeitlich gesperrtes
+  DSM-Konto wird nicht geprüft.
 
 Verworfene bzw. zurückgestellte Alternative: **Synology SSO Server** (OIDC,
 mit Secure SignIn). Sauberer, weil das Passwort `sem-server` nie erreicht —

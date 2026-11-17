@@ -95,6 +95,28 @@ Beispiel in `compose.yaml`:
 * `local` ist nicht für den Betrieb gedacht; beim Start erscheint eine
   Warnung im Log.
 
+## Sitzungen und Datenordner
+
+Nach der Anmeldung am DSM stellt `sem-server` eine eigene App-Sitzung aus.
+Sie liegt in der SQLite-Datei `sem.db` (nur der Hash des Tokens, kein
+Passwort) und überlebt damit Neustarts des Containers.
+
+| Variable | Bedeutung |
+|---|---|
+| `DATA_DIR` | Ordner für `sem.db`, im Beispiel `/data`; ohne Angabe liegen Sitzungen nur im Speicher und der Start warnt |
+| `SESSION_TTL_DAYS` | Tage ohne Nutzung bis zum Ablauf, Vorgabe `30` |
+| `TRUST_PROXY` | `true` hinter dem DSM-Reverse-Proxy, damit `X-Forwarded-Proto` zählt und das Cookie bei HTTPS `Secure` ist; Vorgabe `false` |
+
+* Der Ordner `docker/sem-server/data` (neben `compose.yaml`) muss vor dem
+  ersten Start existieren und für UID 1000 beschreibbar sein: Der Container
+  läuft als Benutzer `node` (UID 1000). `read_only: true` bleibt gesetzt, nur
+  `/data` ist beschreibbar.
+* Wird ein DSM-Konto gesperrt, bleibt eine bestehende App-Sitzung bis zum
+  Ablauf gültig. Abhilfe: Datei `sem.db` löschen (alle müssen sich neu
+  anmelden) oder `SESSION_TTL_DAYS` verkürzen.
+* Nach 5 fehlgeschlagenen Anmeldungen eines Benutzernamens innerhalb von
+  10 Minuten antwortet der Server mit „429“, ohne das DSM zu fragen.
+
 ## HTTPS: `https://sem.matzen.familyds.net`
 
 Die NAS ist bereits über die Synology-DDNS-Adresse `matzen.familyds.net`
