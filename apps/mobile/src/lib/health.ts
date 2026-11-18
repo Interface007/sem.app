@@ -1,18 +1,14 @@
 import { Health } from '@sem/contracts';
+import { apiFetch } from './apiFetch';
 
 export type HealthResult = { ok: true; health: Health } | { ok: false; error: string };
 
-/**
- * Asks the server for `GET /health`. An empty `serverUrl` means the same
- * origin as the page (the web version is served by sem-server itself).
- */
+/** Asks the server for `GET /health` through the central `apiFetch`. */
 export async function fetchHealth(
-  serverUrl: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchApi: (path: string, init?: RequestInit) => Promise<Response> = apiFetch,
 ): Promise<HealthResult> {
-  const url = `${serverUrl.replace(/\/+$/, '')}/health`;
   try {
-    const response = await fetchImpl(url, { headers: { accept: 'application/json' } });
+    const response = await fetchApi('/health', { headers: { accept: 'application/json' } });
     if (!response.ok) {
       return { ok: false, error: `HTTP ${response.status}` };
     }

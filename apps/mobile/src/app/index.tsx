@@ -1,18 +1,30 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { serverUrl } from '../lib/config';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
+import { currentServerUrl, refreshServer } from '../lib/apiFetch';
 import { fetchHealth, type HealthResult } from '../lib/health';
+import { serverHost } from '../lib/serverUrls';
 
 export default function StartScreen() {
   const [result, setResult] = useState<HealthResult | undefined>();
+  const [host, setHost] = useState('');
 
   useEffect(() => {
     let active = true;
-    void fetchHealth(serverUrl).then((value) => {
-      if (active) setResult(value);
+    const load = async () => {
+      await refreshServer();
+      const value = await fetchHealth();
+      if (!active) return;
+      setHost(serverHost(currentServerUrl() ?? ''));
+      setResult(value);
+    };
+    void load();
+    // Switching between WLAN and mobile typically happens in the background.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
     });
     return () => {
       active = false;
+      subscription.remove();
     };
   }, []);
 
@@ -29,6 +41,11 @@ export default function StartScreen() {
           <Text>
             Version {result.health.version} ({result.health.commit})
           </Text>
+          {host !== '' && (
+            <Text testID="server-host" style={styles.host}>
+              {host}
+            </Text>
+          )}
         </>
       ) : (
         <Text testID="health-error" style={styles.error}>
@@ -43,5 +60,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 },
   title: { fontSize: 20, fontWeight: '600' },
   ok: { fontSize: 32, fontWeight: '700', color: '#1b7f3b' },
+  host: { color: '#555' },
   error: { color: '#b00020' },
 });

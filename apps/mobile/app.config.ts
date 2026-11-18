@@ -3,6 +3,7 @@ import 'tsx/cjs';
 import { execSync } from 'node:child_process';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 import { withReleaseSigning } from './plugins/release-signing';
+import { parseServerUrls } from './src/lib/serverUrls';
 
 /** Short commit hash of the checkout, `unknown` outside a git repository. */
 function gitCommit(): string {
@@ -17,7 +18,8 @@ function gitCommit(): string {
 
 /*
  * Static settings live in app.json. Values set at build time:
- *   EXPO_PUBLIC_SERVER_URL  sem-server base URL; updates come from
+ *   EXPO_PUBLIC_SERVER_URL  comma-separated sem-server base URLs (https only,
+ *                         order = priority); updates come from the first:
  *                         <url>/api/updates/manifest (docs/updates.md)
  *   GIT_COMMIT          short commit hash shown in the footer (default: git)
  *   APP_VERSION         version name, e.g. 0.1.0 (CI: from the tag)
@@ -30,7 +32,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     throw new Error(`ANDROID_VERSION_CODE must be a positive integer, got "${versionCode}"`);
   }
 
-  const serverUrl = (process.env.EXPO_PUBLIC_SERVER_URL ?? '').replace(/\/+$/, '');
+  // expo-updates knows only one address: the first of the list wins.
+  const serverUrl = parseServerUrls(process.env.EXPO_PUBLIC_SERVER_URL ?? '')[0] ?? '';
 
   return withReleaseSigning({
     ...config,
