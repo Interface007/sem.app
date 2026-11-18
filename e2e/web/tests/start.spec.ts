@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { mockSession } from './auth-mock.js';
 
 test('start page shows the server status from /health', async ({ page }) => {
+  await mockSession(page);
   await page.goto('/');
 
   await expect(page.getByText('Server-Status')).toBeVisible();
@@ -8,6 +10,7 @@ test('start page shows the server status from /health', async ({ page }) => {
 });
 
 test('navigation offers all four areas', async ({ page }) => {
+  await mockSession(page);
   await page.goto('/');
 
   for (const name of ['Start', 'Haus', 'Scan', 'Einstellungen']) {
@@ -16,6 +19,7 @@ test('navigation offers all four areas', async ({ page }) => {
 });
 
 test('client-side routes load directly', async ({ page }) => {
+  await mockSession(page);
   await page.goto('/scan');
 
   await expect(page.getByText('Dieser Bereich folgt in einer späteren Phase.')).toBeVisible();

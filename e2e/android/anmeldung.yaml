@@ -1,0 +1,31 @@
+# Login flow against a real server with a DSM account (see README.md).
+# Run: maestro test -e SEM_USER=<name> -e SEM_PASSWORD=<password> e2e/android/anmeldung.yaml
+appId: cloud.matzen.sem
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: login-username
+- assertVisible:
+    id: health-status
+- tapOn:
+    id: login-username
+- inputText: ${SEM_USER}
+- tapOn:
+    id: login-password
+- inputText: ${SEM_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: login-submit
+# Tabs are visible after the login.
+- assertVisible: Start
+- assertVisible: Haus
+- assertVisible: Scan
+- assertVisible: Einstellungen
+- tapOn: Einstellungen
+- assertVisible:
+    id: session-user
+- tapOn:
+    id: logout
+- assertVisible:
+    id: login-username
