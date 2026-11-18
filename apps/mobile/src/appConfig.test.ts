@@ -82,6 +82,16 @@ describe('resolved Expo config updates', () => {
     expect(existsSync(resolve(root, updates?.codeSigningCertificate as string))).toBe(true);
   });
 
+  it('uses the first address of a list for updates', () => {
+    const { updates } = resolveWith('https://a.example,https://b.example');
+    expect(updates?.url).toBe('https://a.example/api/updates/manifest');
+  });
+
+  it('never allows cleartext traffic', () => {
+    const resolved = resolveWith('https://a.example');
+    expect(JSON.stringify(resolved)).not.toContain('usesCleartextTraffic');
+  });
+
   it('disables updates when no server URL is configured', () => {
     const { updates } = resolveWith(undefined);
     expect(updates?.enabled).toBe(false);
