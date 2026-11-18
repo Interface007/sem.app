@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { apiError, loginOk, mockLogin } from './auth-mock.js';
 
-const tabNames = ['Start', 'Haus', 'Scan', 'Einstellungen'];
+const tabNames = ['Start', 'Scan', 'Einstellungen'];
 
 async function fillAndSubmit(page: Page, password: string) {
   await page.getByTestId('login-username').fill('Sven');

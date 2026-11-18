@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Link, Tabs } from 'expo-router';
 import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
 import { BuildFooter } from '../components/BuildFooter';
 import { AuthProvider, useAuth } from '../lib/AuthProvider';
@@ -34,7 +34,19 @@ function Navigation() {
       </Tabs.Protected>
       <Tabs.Protected guard={signedIn}>
         <Tabs.Screen name="index" options={{ title: 'Start' }} />
-        <Tabs.Screen name="haus" options={{ title: 'Haus' }} />
+        <Tabs.Screen
+          name="haus"
+          options={{
+            title: 'Haus',
+            // Reached via the tile on the start page, not via the tab bar.
+            href: null,
+            headerLeft: () => (
+              <Link href="/" accessibilityLabel="Zurück zur Startseite" style={styles.back}>
+                ‹ Start
+              </Link>
+            ),
+          }}
+        />
         <Tabs.Screen name="scan" options={{ title: 'Scan' }} />
         <Tabs.Screen name="einstellungen" options={{ title: 'Einstellungen' }} />
       </Tabs.Protected>
@@ -54,5 +66,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  back: { paddingHorizontal: 16, fontSize: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 16 },
 });

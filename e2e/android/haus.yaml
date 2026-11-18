@@ -1,0 +1,24 @@
+# Opens the house model from the start page (see README.md); runs in no CI yet.
+# Run: maestro test -e SEM_USER=<name> -e SEM_PASSWORD=<password> e2e/android/haus.yaml
+appId: cloud.matzen.sem
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: login-username
+- inputText: ${SEM_USER}
+- tapOn:
+    id: login-password
+- inputText: ${SEM_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: login-submit
+- assertVisible:
+    id: tile-haus
+- tapOn:
+    id: tile-haus
+# The viewer fills the screen (or, without a configured viewer, a hint is shown).
+- extendedWaitUntil:
+    visible:
+      id: haus-viewer
+    timeout: 15000
