@@ -1,6 +1,7 @@
 import * as Updates from 'expo-updates';
 import { useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '../lib/AuthProvider';
 import {
   checkAndApplyUpdate,
   describeRunningUpdate,
@@ -8,6 +9,7 @@ import {
 } from '../lib/updateStatus';
 
 export default function EinstellungenScreen() {
+  const { state, logout } = useAuth();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -21,6 +23,10 @@ export default function EinstellungenScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Einstellungen</Text>
+      {state.status === 'signedIn' && (
+        <Text testID="session-user">Angemeldet als {state.user.name}</Text>
+      )}
+      <Button testID="logout" title="Abmelden" onPress={() => void logout()} />
       <Text testID="update-id">
         Update:{' '}
         {describeRunningUpdate({
