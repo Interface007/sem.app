@@ -58,6 +58,31 @@ export class SessionService {
     return { id: stored.id, user: stored.user, sid: stored.sid, expiresAt };
   }
 
+  /**
+   * The key for the house viewer path of a session. Random, stable for the
+   * lifetime of the session, and not the session token.
+   */
+  viewerKey(id: string): string {
+    const existing = this.store.getViewerKey(id);
+    if (existing !== undefined) return existing;
+    this.store.setViewerKey(id, randomBytes(32).toString('base64url'));
+    const key = this.store.getViewerKey(id);
+    if (key === undefined) throw new Error('session vanished');
+    return key;
+  }
+
+  /** Whether the key belongs to a live session; does not extend the session. */
+  isValidViewerKey(key: string): boolean {
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) return false;
+    const found = this.store.findByViewerKey(key);
+    if (found === undefined) return false;
+    if (found.expiresAt <= this.now()) {
+      this.store.delete(found.id);
+      return false;
+    }
+    return true;
+  }
+
   revoke(id: string): void {
     this.store.delete(id);
   }

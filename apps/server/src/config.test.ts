@@ -11,6 +11,8 @@ describe('loadConfig', () => {
       updatesDir: undefined,
       updatesPrivateKeyPath: undefined,
       updatesBaseUrl: undefined,
+      hausViewerBaseUrl: undefined,
+      hausViewerEntry: 'viewer.html',
       version: '0.0.0-dev',
       commit: 'unknown',
       nas: { kind: 'none' },
@@ -33,6 +35,21 @@ describe('loadConfig', () => {
     },
   );
 
+  it.each([
+    ['http://192.168.1.20:8123/local/haus', 'http://192.168.1.20:8123/local/haus/'],
+    ['http://192.168.1.20:8123/local/haus/', 'http://192.168.1.20:8123/local/haus/'],
+  ])('reads the house viewer folder %s with a trailing slash', (value, expected) => {
+    expect(
+      loadConfig({ HAUS_VIEWER_BASE_URL: value, HAUS_VIEWER_ENTRY: 'index.html' }),
+    ).toMatchObject({ hausViewerBaseUrl: expected, hausViewerEntry: 'index.html' });
+  });
+
+  it('rejects a house viewer folder that is not an http(s) URL', () => {
+    expect(() => loadConfig({ HAUS_VIEWER_BASE_URL: 'ftp://nas/haus/' })).toThrow(
+      /Invalid configuration/,
+    );
+  });
+
   it('reads all values from the environment', () => {
     expect(
       loadConfig({
@@ -54,6 +71,8 @@ describe('loadConfig', () => {
       updatesDir: '/app/updates',
       updatesPrivateKeyPath: '/run/key.pem',
       updatesBaseUrl: 'https://sem.example',
+      hausViewerBaseUrl: undefined,
+      hausViewerEntry: 'viewer.html',
       version: '0.1.0',
       commit: 'abc1234',
       nas: { kind: 'none' },

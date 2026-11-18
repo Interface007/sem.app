@@ -1,19 +1,26 @@
 import path from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { Health } from '@sem/contracts';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { registerAuth, sendError } from './auth/routes.js';
 import { SessionService } from './auth/session-service.js';
 import type { Config } from './config.js';
 import { SqliteSessionStore, type SessionStore } from './db/sessions.js';
 import { UnconfiguredNasGateway, type NasGateway } from './nas/index.js';
+import { maskViewerKey, registerHausRoutes } from './haus/routes.js';
 import { registerUpdateRoutes } from './updates.js';
 
 export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
   Partial<
     Pick<
       Config,
-      'updatesDir' | 'updatesPrivateKeyPath' | 'updatesBaseUrl' | 'sessionTtlDays' | 'trustProxy'
+      | 'updatesDir'
+      | 'updatesPrivateKeyPath'
+      | 'updatesBaseUrl'
+      | 'sessionTtlDays'
+      | 'trustProxy'
+      | 'hausViewerBaseUrl'
+      | 'hausViewerEntry'
     >
   > & {
     logLevel?: Config['logLevel'];
@@ -33,11 +40,21 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<FastifyInstance> {
   const logLevel = config.logLevel ?? 'silent';
+  // The viewer key is part of the URL path and must not reach the log.
+  const serializers = {
+    req: (request: FastifyRequest) => ({
+      method: request.method,
+      url: maskViewerKey(request.url),
+      host: request.host,
+      remoteAddress: request.ip,
+      remotePort: request.socket.remotePort ?? 0,
+    }),
+  };
   const app = Fastify({
     logger:
       deps.logStream === undefined
-        ? { level: logLevel }
-        : { level: logLevel, stream: deps.logStream },
+        ? { level: logLevel, serializers }
+        : { level: logLevel, serializers, stream: deps.logStream },
     trustProxy: config.trustProxy ?? false,
   });
 
@@ -71,6 +88,12 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
   );
 
   registerAuth(app, { nasGateway: deps.nasGateway ?? new UnconfiguredNasGateway(), sessions, now });
+
+  registerHausRoutes(app, {
+    baseUrl: config.hausViewerBaseUrl,
+    entry: config.hausViewerEntry ?? 'viewer.html',
+    sessions,
+  });
 
   registerUpdateRoutes(app, {
     dir: config.updatesDir,

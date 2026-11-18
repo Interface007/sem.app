@@ -40,6 +40,13 @@ const EnvSchema = z
     UPDATES_PRIVATE_KEY_PATH: z.string().min(1).optional(),
     /** Public base URL used in asset URLs; derived from the request if unset. */
     UPDATES_BASE_URL: z.url().optional(),
+    /** Folder of the house viewer, e.g. http://192.168.1.20:8123/local/haus/; off if unset. */
+    HAUS_VIEWER_BASE_URL: z
+      .url({ protocol: /^https?$/ })
+      .transform((value) => (value.endsWith('/') ? value : `${value}/`))
+      .optional(),
+    /** Entry file of the house viewer, relative to the folder. */
+    HAUS_VIEWER_ENTRY: z.string().min(1).default('viewer.html'),
     APP_VERSION: z.string().min(1).default('0.0.0-dev'),
     GIT_COMMIT: z.string().min(1).default('unknown'),
     /** NAS access; no gateway (login always unavailable) if unset. */
@@ -86,6 +93,8 @@ export interface Config {
   updatesDir: string | undefined;
   updatesPrivateKeyPath: string | undefined;
   updatesBaseUrl: string | undefined;
+  hausViewerBaseUrl: string | undefined;
+  hausViewerEntry: string;
   version: string;
   commit: string;
   nas: NasConfig;
@@ -115,6 +124,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     updatesDir: e.UPDATES_DIR,
     updatesPrivateKeyPath: e.UPDATES_PRIVATE_KEY_PATH,
     updatesBaseUrl: e.UPDATES_BASE_URL,
+    hausViewerBaseUrl: e.HAUS_VIEWER_BASE_URL,
+    hausViewerEntry: e.HAUS_VIEWER_ENTRY,
     version: e.APP_VERSION,
     commit: e.GIT_COMMIT,
     nas,

@@ -29,10 +29,15 @@ export interface SessionStore {
   delete(id: string): void;
   /** Removes all sessions that expired at or before `now`. */
   deleteExpired(now: number): void;
+  /** Key for the house viewer route of a session; `undefined` until one is set. */
+  getViewerKey(id: string): string | undefined;
+  /** Sets the key unless the session already has one. */
+  setViewerKey(id: string, key: string): void;
+  findByViewerKey(key: string): { id: string; expiresAt: number } | undefined;
   close(): void;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 interface SessionRow {
   id: string;
@@ -69,6 +74,12 @@ export class SqliteSessionStore implements SessionStore {
           expires_at INTEGER NOT NULL
         );
         CREATE INDEX sessions_expires_at ON sessions (expires_at);
+      `);
+    }
+    if (row.user_version < 2) {
+      this.db.exec(`
+        ALTER TABLE sessions ADD COLUMN viewer_key TEXT;
+        CREATE UNIQUE INDEX sessions_viewer_key ON sessions (viewer_key);
       `);
     }
     this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -119,6 +130,25 @@ export class SqliteSessionStore implements SessionStore {
 
   deleteExpired(now: number): void {
     this.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+  }
+
+  getViewerKey(id: string): string | undefined {
+    const row = this.db.prepare('SELECT viewer_key FROM sessions WHERE id = ?').get(id) as
+      { viewer_key: string | null } | undefined;
+    return row?.viewer_key ?? undefined;
+  }
+
+  setViewerKey(id: string, key: string): void {
+    this.db
+      .prepare('UPDATE sessions SET viewer_key = ? WHERE id = ? AND viewer_key IS NULL')
+      .run(key, id);
+  }
+
+  findByViewerKey(key: string): { id: string; expiresAt: number } | undefined {
+    const row = this.db
+      .prepare('SELECT id, expires_at FROM sessions WHERE viewer_key = ?')
+      .get(key) as { id: string; expires_at: number } | undefined;
+    return row === undefined ? undefined : { id: row.id, expiresAt: row.expires_at };
   }
 
   close(): void {

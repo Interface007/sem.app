@@ -117,6 +117,29 @@ Passwort) und überlebt damit Neustarts des Containers.
 * Nach 5 fehlgeschlagenen Anmeldungen eines Benutzernamens innerhalb von
   10 Minuten antwortet der Server mit „429“, ohne das DSM zu fragen.
 
+## Haus-Viewer aus Home Assistant
+
+`sem-server` kann den Haus-Viewer, der in Home Assistant unter `/local/haus/`
+liegt, an angemeldete Benutzer durchreichen. Der Viewer wird dabei nicht
+verändert; der Server holt die Dateien ab und liefert sie unter seiner eigenen
+Adresse aus (ohne `X-Frame-Options`, damit die App ihn einbetten kann). Ein
+Home-Assistant-Token ist nicht nötig, `/local/` ist dort ohne Anmeldung lesbar.
+
+| Variable | Bedeutung |
+|---|---|
+| `HAUS_VIEWER_BASE_URL` | URL des Ordners, z. B. `http://192.168.1.20:8123/local/haus/`; ein fehlender abschließender `/` wird ergänzt. Ohne Angabe ist die Funktion aus (`not_configured`) |
+| `HAUS_VIEWER_ENTRY` | Einstiegsdatei im Ordner, Vorgabe `viewer.html` |
+
+* Der **Container** muss Home Assistant erreichen. Tailscale läuft auf DSM
+  üblicherweise im Userspace-Modus; dann kommen Container nicht ins Tailnet
+  und lösen `*.ts.net` nicht auf. In dem Fall die LAN-Adresse von Home
+  Assistant eintragen.
+* Der Client lädt three.js (unpkg) und die Schriften (Google Fonts) weiterhin
+  selbst und braucht dafür Internet.
+* Jede Sitzung bekommt einen eigenen Schlüssel im Pfad
+  (`/api/haus/viewer/k/<schlüssel>/…`). Er erlischt mit der Sitzung und
+  berechtigt nur zum Lesen dieser Route. Im Log wird er durch `***` ersetzt.
+
 ## HTTPS: `https://sem.matzen.familyds.net`
 
 Die NAS ist bereits über die Synology-DDNS-Adresse `matzen.familyds.net`

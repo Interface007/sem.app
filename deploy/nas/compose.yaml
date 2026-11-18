@@ -19,6 +19,10 @@ services:
       # Anmeldung am DSM (siehe docs/betrieb-nas.md, „Anmeldung am DSM“):
       # NAS_GATEWAY: dsm
       # DSM_URL: http://172.17.0.1:5000
+      # Haus-Viewer aus Home Assistant durchreichen (siehe docs/betrieb-nas.md).
+      # Der Container muss die Adresse erreichen; im Zweifel die LAN-Adresse nehmen:
+      # HAUS_VIEWER_BASE_URL: http://192.168.1.20:8123/local/haus/
+      # HAUS_VIEWER_ENTRY: viewer.html
       # Nur für Tests/Entwicklung, nicht im Betrieb:
       # NAS_GATEWAY: local
       # LOCAL_USERS: anna:passwort,ben:passwort2

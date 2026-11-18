@@ -35,6 +35,7 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   otp_invalid: 'Der Bestätigungscode ist falsch.',
   account_blocked: 'Das Konto ist gesperrt.',
   nas_unavailable: 'Die NAS ist derzeit nicht erreichbar.',
+  haus_unavailable: 'Das Haus-Modell ist derzeit nicht erreichbar.',
   rate_limited: 'Zu viele Fehlversuche. Bitte später erneut versuchen.',
   unauthenticated: 'Bitte anmelden.',
 };

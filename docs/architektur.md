@@ -133,6 +133,26 @@ Fakten aus dem `home`-Repo, auf die sich sem.app verlässt:
   ausgeliefert. Der Basisordner ist zur Laufzeit wählbar (siehe 6).
 * Die Factory fasst das `home`-Repo **nie** an.
 
+**Übergangslösung: Durchreichen aus Home Assistant.**
+
+Bis die Pakete aus dem NAS-Ordner bereitstehen, holt `sem-server` den Viewer
+aus Home Assistant (`/local/haus/`) ab und liefert ihn unter der eigenen
+Adresse aus. Direktes Einbetten scheitert an `X-Frame-Options: SAMEORIGIN`,
+an gemischtem Inhalt (`http` in einer `https`-Seite), an gesperrtem Klartext
+auf Android und daran, dass der Tailscale-Name im WLAN nicht auflösbar ist.
+
+* `GET /api/haus/viewer` (Sitzung nötig) liefert `HausViewerInfo`
+  (`packages/contracts/src/haus.ts`) mit einem Pfad
+  `/api/haus/viewer/k/<schlüssel>/viewer.html?v=<version>`.
+* Der Schlüssel im Pfad ist ein Zufallswert je Sitzung, kein Sitzungstoken:
+  Eine Android-WebView sendet `Authorization` nur mit der ersten Anfrage, so
+  sind alle relativen Anfragen des Viewers trotzdem berechtigt.
+* Der Server reicht nur Dateien unterhalb von `HAUS_VIEWER_BASE_URL` durch,
+  ohne `Authorization`/`Cookie`, ohne Weiterleitungen und als Stream.
+  `X-Frame-Options` und `Set-Cookie` der Quelle entfallen.
+* Der Viewer bleibt unverändert; three.js und Schriften lädt der Client weiter
+  von unpkg bzw. Google Fonts.
+
 Vorarbeiten im `home`-Repo (dort umzusetzen, nicht in sem.app):
 
 * Export-Ziel „sem" mit Manifest.
