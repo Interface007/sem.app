@@ -439,7 +439,7 @@ describe('persistence', () => {
     expect(dump).not.toContain('geheim-passwort');
     expect(rows[0]).toMatchObject({ username: 'anna' });
     expect(rows[0]).toHaveProperty('token_hash');
-    expect(version).toEqual({ user_version: 1 });
+    expect(version).toEqual({ user_version: 2 });
   });
 
   it('refuses a database from a newer version', () => {

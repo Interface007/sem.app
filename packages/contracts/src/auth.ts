@@ -37,6 +37,7 @@ export const ApiErrorCode = z.enum([
   'otp_invalid',
   'account_blocked',
   'nas_unavailable',
+  'haus_unavailable',
   'rate_limited',
   'unauthenticated',
 ]);
