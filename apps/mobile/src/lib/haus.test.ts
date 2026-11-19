@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchViewerInfo } from './haus';
+import { createSessionClient } from './session';
 
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }));
@@ -14,6 +15,36 @@ describe('fetchViewerInfo', () => {
     });
     expect(result).toEqual({ status: 'available', path });
     expect(paths).toEqual(['/api/haus/viewer']);
+  });
+
+  it('sends the Android session token and loads the viewer when authenticated', async () => {
+    const path = '/api/haus/viewer/k/abc/index.html?v=1';
+    const seen: { path: string; authorization: string | null }[] = [];
+    const client = createSessionClient({
+      fetchApi: async (p, init) => {
+        seen.push({ path: p, authorization: new Headers(init?.headers).get('authorization') });
+        return new Response(JSON.stringify({ available: true, path }));
+      },
+      store: { get: async () => 'tok-123', set: async () => {}, clear: async () => {} },
+      delivery: 'body',
+    });
+    expect(await fetchViewerInfo(client.authFetch)).toEqual({ status: 'available', path });
+    expect(seen).toEqual([{ path: '/api/haus/viewer', authorization: 'Bearer tok-123' }]);
+  });
+
+  it('signs the app out when the session has expired', async () => {
+    const onExpired = vi.fn();
+    const client = createSessionClient({
+      fetchApi: async () =>
+        new Response(JSON.stringify({ error: 'unauthenticated', message: 'Text' }), {
+          status: 401,
+        }),
+      store: { get: async () => 'old', set: async () => {}, clear: async () => {} },
+      delivery: 'body',
+    });
+    client.onUnauthenticated(onExpired);
+    await fetchViewerInfo(client.authFetch);
+    expect(onExpired).toHaveBeenCalledOnce();
   });
 
   it('passes on the reason when unavailable', async () => {

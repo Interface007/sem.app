@@ -2,8 +2,9 @@ import type { ViewerEntitiesMessage } from '@sem/contracts';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
 import { HausViewer } from '../components/HausViewer';
-import { apiFetch, currentServerUrl } from '../lib/apiFetch';
+import { currentServerUrl } from '../lib/apiFetch';
 import { fetchViewerInfo } from '../lib/haus';
+import { session } from '../lib/sessionClient';
 import { buildViewerUrl, viewerOrigin } from '../lib/viewerUrl';
 
 type State =
@@ -19,7 +20,7 @@ export default function HausScreen() {
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
-    const info = await fetchViewerInfo(apiFetch);
+    const info = await fetchViewerInfo(session.authFetch);
     if (info.status !== 'available') {
       setState({ status: info.status });
       return;
