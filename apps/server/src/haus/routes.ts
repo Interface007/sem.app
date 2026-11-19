@@ -62,6 +62,26 @@ export function safeRelativePath(rawPath: string): string | undefined {
   return rawPath;
 }
 
+/** Removes userinfo (`user:password@`) from a URL so that it can be logged. */
+export function redactUrl(url: string | URL): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return '[invalid url]';
+  }
+  parsed.username = '';
+  parsed.password = '';
+  return parsed.href;
+}
+
+/** Short reason for a failed `fetch`: the network error code, else the error name. */
+export function fetchErrorCode(err: unknown): string {
+  const code = (err as { cause?: { code?: unknown } } | null)?.cause?.code;
+  if (typeof code === 'string' && code !== '') return code;
+  return err instanceof Error ? err.name : 'UnknownError';
+}
+
 function version(headers: Headers): string {
   const source = headers.get('etag') ?? headers.get('last-modified') ?? '';
   return createHash('sha256').update(source).digest('hex').slice(0, 12);
@@ -74,18 +94,34 @@ function privateCacheControl(value: string): string {
 export function registerHausRoutes(app: FastifyInstance, deps: HausDeps): void {
   const { baseUrl, entry, sessions } = deps;
 
+  if (baseUrl === undefined) {
+    app.log.info('haus viewer disabled');
+  } else {
+    app.log.info({ baseUrl: redactUrl(baseUrl), entry }, 'haus viewer configured');
+  }
+
   app.get(ROUTE, { preHandler: app.requireSession }, async (request, reply) => {
     void reply.header('Cache-Control', 'no-store');
     if (baseUrl === undefined) {
       return HausViewerInfo.parse({ available: false, reason: 'not_configured' });
     }
+    const probeTarget = new URL(entry, baseUrl);
+    const started = Date.now();
     try {
-      const response = await fetch(new URL(entry, baseUrl), {
+      const response = await fetch(probeTarget, {
         method: 'HEAD',
         redirect: 'manual',
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       });
       if (!response.ok) {
+        request.log.warn(
+          {
+            target: redactUrl(probeTarget),
+            status: response.status,
+            durationMs: Date.now() - started,
+          },
+          'haus viewer probe failed',
+        );
         return HausViewerInfo.parse({ available: false, reason: 'unreachable' });
       }
       const key = sessions.viewerKey(request.session.id);
@@ -94,7 +130,15 @@ export function registerHausRoutes(app: FastifyInstance, deps: HausDeps): void {
         available: true,
         path: `${KEY_PREFIX}${key}/${encodedEntry}?v=${version(response.headers)}`,
       });
-    } catch {
+    } catch (err) {
+      request.log.warn(
+        {
+          target: redactUrl(probeTarget),
+          error: fetchErrorCode(err),
+          durationMs: Date.now() - started,
+        },
+        'haus viewer probe failed',
+      );
       return HausViewerInfo.parse({ available: false, reason: 'unreachable' });
     }
   });
@@ -140,7 +184,11 @@ export function registerHausRoutes(app: FastifyInstance, deps: HausDeps): void {
           redirect: 'manual',
           signal: controller.signal,
         });
-      } catch {
+      } catch (err) {
+        request.log.warn(
+          { target: redactUrl(target), error: fetchErrorCode(err) },
+          'haus viewer upstream failed',
+        );
         return sendError(reply, 502, 'haus_unavailable');
       } finally {
         clearTimeout(timer);
@@ -148,7 +196,28 @@ export function registerHausRoutes(app: FastifyInstance, deps: HausDeps): void {
       // Redirects are not followed: they could lead to any host.
       if (upstream.status >= 300 && upstream.status < 400 && upstream.status !== 304) {
         await upstream.body?.cancel();
+        const location = upstream.headers.get('location');
+        request.log.warn(
+          {
+            target: redactUrl(target),
+            status: upstream.status,
+            ...(location === null ? {} : { location: redactUrl(new URL(location, target)) }),
+          },
+          'haus viewer upstream failed',
+        );
         return sendError(reply, 502, 'haus_unavailable');
+      }
+      // The viewer asks for optional files (e.g. `wp_datenblatt.json`), so 404 is normal.
+      if (upstream.status >= 500) {
+        request.log.warn(
+          { target: redactUrl(target), status: upstream.status },
+          'haus viewer upstream failed',
+        );
+      } else if (upstream.status === 404) {
+        request.log.debug(
+          { target: redactUrl(target), status: upstream.status },
+          'haus viewer upstream not found',
+        );
       }
 
       void reply.code(upstream.status);

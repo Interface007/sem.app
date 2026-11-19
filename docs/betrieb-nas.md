@@ -140,6 +140,34 @@ Home-Assistant-Token ist nicht nötig, `/local/` ist dort ohne Anmeldung lesbar.
   (`/api/haus/viewer/k/<schlüssel>/…`). Er erlischt mit der Sitzung und
   berechtigt nur zum Lesen dieser Route. Im Log wird er durch `***` ersetzt.
 
+### Logmeldungen und Fehlersuche
+
+Der Server schreibt (ohne Schlüssel, Token, Cookies und Zugangsdaten aus URLs):
+
+* Beim Start einmal `haus viewer configured` mit `baseUrl` und `entry` bzw.
+  `haus viewer disabled`, wenn `HAUS_VIEWER_BASE_URL` fehlt. So sieht man, welche
+  Werte der laufende Container wirklich hat.
+* `haus viewer probe failed` (Level `warn`), wenn die Prüfung in
+  `GET /api/haus/viewer` scheitert, mit `target`, `status` oder `error` und
+  `durationMs`.
+* `haus viewer upstream failed` (Level `warn`), wenn das Durchreichen scheitert
+  (Verbindungsfehler, abgelehnte Weiterleitung mit `location`, Antwort ≥ 500).
+  Ein `404` der Quelle steht nur auf Level `debug`, weil der Viewer optionale
+  Dateien abfragt.
+
+Häufige Ursachen:
+
+| Eintrag | Bedeutung |
+|---|---|
+| `error: ENOTFOUND` | Der Container löst den Namen nicht auf, z. B. `*.ts.net` bei Tailscale im Userspace-Modus → LAN-Adresse eintragen |
+| `error: ECONNREFUSED`, `ETIMEDOUT`, `UND_ERR_CONNECT_TIMEOUT`, `TimeoutError` | Adresse oder Port falsch bzw. nicht erreichbar |
+| `status: 404` | `HAUS_VIEWER_ENTRY` oder der Ordner in `HAUS_VIEWER_BASE_URL` ist falsch |
+
+Änderungen an `compose.yaml` greifen erst, wenn der Container neu erzeugt wird
+(`docker compose up -d --force-recreate` bzw. Container Manager → Projekt →
+Stoppen → Erstellen); ein Neustart reicht nicht. Mit `haus viewer configured`
+im Log lässt sich prüfen, ob die neuen Werte angekommen sind.
+
 ## HTTPS: `https://sem.matzen.familyds.net`
 
 Die NAS ist bereits über die Synology-DDNS-Adresse `matzen.familyds.net`
