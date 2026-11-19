@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { LocalNasGateway } from '../nas/local.js';
-import { maskViewerKey, safeRelativePath } from './routes.js';
+import { fetchErrorCode, maskViewerKey, redactUrl, safeRelativePath } from './routes.js';
 
 const VIEWER_HTML = '<!doctype html><title>Haus</title>';
 const BINARY = Buffer.from(Array.from({ length: 1024 }, (_, i) => i % 256));
@@ -329,9 +329,96 @@ describe('house viewer pass-through', () => {
     await app.inject({ method: 'GET', url: `${base}/../x` });
     await app.inject({ method: 'GET', url: `/api/haus/viewer/k/${key}x/viewer.html` });
 
+    await close(source);
+    await app.inject({ method: 'GET', url: `${base}/viewer.html` });
+    await app.inject({ method: 'GET', url: `${base}/redirect` });
+    await app.inject({ method: 'GET', url: '/api/haus/viewer', headers });
+
     const log = logLines.join('');
     expect(log).toContain('/api/haus/viewer/k/***/viewer.html');
     expect(log).not.toContain(key);
+    expect(log).not.toContain(headers.authorization?.slice(7) ?? 'missing');
+  });
+
+  function entriesFor(message: string): Record<string, unknown>[] {
+    return logLines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry.msg === message);
+  }
+
+  it('logs the cause when the source refuses connections', async () => {
+    const headers = await login();
+    await close(source);
+    expect(await info(headers)).toEqual({ available: false, reason: 'unreachable' });
+    const entries = entriesFor('haus viewer probe failed');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      level: 40,
+      target: `${sourceBase}viewer.html`,
+      error: 'ECONNREFUSED',
+    });
+    expect(entries[0]?.reqId).toBeDefined();
+    expect(typeof entries[0]?.durationMs).toBe('number');
+  });
+
+  it('logs the cause for a host that does not resolve', async () => {
+    await app.close();
+    app = await build({ hausViewerBaseUrl: 'http://user:pw@nicht-vorhanden.invalid/haus/' });
+    expect(await info(await login())).toEqual({ available: false, reason: 'unreachable' });
+    const entries = entriesFor('haus viewer probe failed');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ target: 'http://nicht-vorhanden.invalid/haus/viewer.html' });
+    expect(typeof entries[0]?.error).toBe('string');
+    expect(logLines.join('')).not.toContain('pw@');
+  });
+
+  it('logs the status when the source answers the probe with 404', async () => {
+    await app.close();
+    app = await build({ hausViewerBaseUrl: `${sourceBase}missing/` });
+    await info(await login());
+    const entries = entriesFor('haus viewer probe failed');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ status: 404, target: `${sourceBase}missing/viewer.html` });
+  });
+
+  it('logs a refused redirect and a failing source when passing through', async () => {
+    const base = keyBase(await viewerPath(await login()));
+    await app.inject({ method: 'GET', url: `${base}/redirect` });
+    const [redirect] = entriesFor('haus viewer upstream failed');
+    expect(redirect).toMatchObject({
+      level: 40,
+      status: 302,
+      target: `${sourceBase}redirect`,
+      location: expect.stringContaining('/evil') as unknown,
+    });
+
+    await close(source);
+    await app.inject({ method: 'GET', url: `${base}/viewer.html` });
+    const entries = entriesFor('haus viewer upstream failed');
+    expect(entries).toHaveLength(2);
+    expect(entries[1]).toMatchObject({ error: 'ECONNREFUSED' });
+  });
+
+  it('does not log successful or missing files at warn or above', async () => {
+    const base = keyBase(await viewerPath(await login()));
+    await app.inject({ method: 'GET', url: `${base}/viewer.html` });
+    await app.inject({ method: 'GET', url: `${base}/wp_datenblatt.json` });
+    const noisy = logLines
+      .map((line) => JSON.parse(line) as { level: number })
+      .filter((entry) => entry.level >= 40);
+    expect(noisy).toEqual([]);
+  });
+
+  it('logs the effective configuration once at startup', async () => {
+    const configured = entriesFor('haus viewer configured');
+    expect(configured).toHaveLength(1);
+    expect(configured[0]).toMatchObject({ level: 30, baseUrl: sourceBase, entry: 'viewer.html' });
+
+    logLines = [];
+    await app.close();
+    app = await build({ hausViewerBaseUrl: undefined });
+    expect(entriesFor('haus viewer disabled')).toHaveLength(1);
+    expect(entriesFor('haus viewer configured')).toHaveLength(0);
   });
 });
 
@@ -343,6 +430,26 @@ describe('maskViewerKey', () => {
     ['/health', '/health'],
   ])('masks %s', (url, expected) => {
     expect(maskViewerKey(url)).toBe(expected);
+  });
+});
+
+describe('redactUrl', () => {
+  it.each([
+    ['http://user:secret@ha.local:8123/local/haus/', 'http://ha.local:8123/local/haus/'],
+    ['http://user@ha.local/a?v=1', 'http://ha.local/a?v=1'],
+    ['http://ha.local/local/haus/viewer.html', 'http://ha.local/local/haus/viewer.html'],
+    ['not a url', '[invalid url]'],
+  ])('redacts %s', (url, expected) => {
+    expect(redactUrl(url)).toBe(expected);
+  });
+});
+
+describe('fetchErrorCode', () => {
+  it('prefers the cause code, then the error name', () => {
+    const withCause = new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } });
+    expect(fetchErrorCode(withCause)).toBe('ENOTFOUND');
+    expect(fetchErrorCode(new DOMException('x', 'TimeoutError'))).toBe('TimeoutError');
+    expect(fetchErrorCode('weird')).toBe('UnknownError');
   });
 });
 
