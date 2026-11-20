@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildViewerUrl, isAllowedNavigation, viewerBridgeScript, viewerOrigin } from './viewerUrl';
+import {
+  appOrigin,
+  buildViewerUrl,
+  isAllowedNavigation,
+  viewerBridgeScript,
+  viewerOrigin,
+} from './viewerUrl';
 
 const path = '/api/haus/viewer/k/abc/index.html?v=1';
 
@@ -49,5 +55,19 @@ describe('viewerBridgeScript', () => {
     expect(viewerBridgeScript).toContain("addEventListener('message'");
     expect(viewerBridgeScript).toContain('ReactNativeWebView.postMessage');
     expect(viewerBridgeScript.trimEnd().endsWith('true;')).toBe(true);
+  });
+});
+
+describe('appOrigin', () => {
+  it('uses the origin of the running page', () => {
+    expect(appOrigin({ location: { origin: 'https://sem.example.org' } })).toBe(
+      'https://sem.example.org',
+    );
+  });
+
+  it('stays empty where there is no location (React Native)', () => {
+    // React Native defines `window`, but no `window.location`.
+    expect(appOrigin({})).toBe('');
+    expect(appOrigin({ location: {} })).toBe('');
   });
 });
