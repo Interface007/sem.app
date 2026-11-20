@@ -173,6 +173,24 @@ Vorarbeiten im `home`-Repo (dort umzusetzen, nicht in sem.app):
 * Die OCR selbst bleibt bei synOCR. Vor dem ersten Einsatz einmal von Hand
   prüfen, dass synOCR `.part`-Dateien ignoriert.
 
+### 5.3 Standort
+
+* Modul `apps/server/src/locations/`, Verträge in `packages/contracts/src/location.ts`.
+  Die Phones melden ihre Position per `POST /api/locations`; angemeldete
+  Benutzer rufen per Polling mit `GET /api/locations` die letzte bekannte
+  Position jedes Geräts ab. `DELETE /api/locations/:deviceId` löscht das
+  eigene Gerät (Teilen abgeschaltet, Abmelden).
+* Gespeichert wird **nur die letzte Position je Gerät**, kein Verlauf – es
+  entsteht kein Bewegungsprofil. Der Stand liegt im Arbeitsspeicher; in die
+  Tabelle `locations` der Datei `sem.db` wird höchstens alle
+  `LOCATION_FLUSH_SECONDS` und beim Herunterfahren geschrieben.
+* Aufbewahrung: Positionen, die länger als `LOCATION_MAX_AGE_HOURS` (Vorgabe
+  24) zurückliegen (Maßstab ist der Empfangszeitpunkt), werden nicht mehr
+  ausgeliefert und gelöscht.
+* Sichtbarkeit: Jeder angemeldete Benutzer sieht alle Positionen; es gibt
+  keine Gruppen. Der Benutzer einer Meldung kommt immer aus der Sitzung.
+* Koordinaten erscheinen nicht im Log.
+
 ## 6. Anmeldung und Ordnerwahl
 
 **Entscheidung v1: Anmeldung mit dem DSM-Benutzer über die DSM-Web-API.**

@@ -8,6 +8,8 @@ import type { Config } from './config.js';
 import { SqliteSessionStore, type SessionStore } from './db/sessions.js';
 import { UnconfiguredNasGateway, type NasGateway } from './nas/index.js';
 import { maskViewerKey, registerHausRoutes } from './haus/routes.js';
+import { registerLocationRoutes } from './locations/routes.js';
+import { MemoryLocationStore } from './locations/store.js';
 import { registerUpdateRoutes } from './updates.js';
 
 export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
@@ -21,6 +23,8 @@ export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
       | 'trustProxy'
       | 'hausViewerBaseUrl'
       | 'hausViewerEntry'
+      | 'locationMaxAgeHours'
+      | 'locationFlushSeconds'
     >
   > & {
     logLevel?: Config['logLevel'];
@@ -36,7 +40,8 @@ export interface AppDeps {
   logStream?: { write(message: string): void };
 }
 
-const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = HOUR_MS;
 
 export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<FastifyInstance> {
   const logLevel = config.logLevel ?? 'silent';
@@ -75,9 +80,32 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
     sessions.deleteExpired();
   }, CLEANUP_INTERVAL_MS);
   cleanup.unref();
+  const locations = new MemoryLocationStore({
+    persistence: store.locations,
+    now,
+    maxAgeMs: (config.locationMaxAgeHours ?? 24) * HOUR_MS,
+  });
+  const locationFlush = setInterval(
+    () => {
+      try {
+        locations.tick();
+      } catch {
+        // Not logged with details; the next tick retries.
+        app.log.error('writing locations failed');
+      }
+    },
+    (config.locationFlushSeconds ?? 60) * 1000,
+  );
+  locationFlush.unref();
   app.addHook('onClose', async () => {
     clearInterval(cleanup);
-    store.close();
+    clearInterval(locationFlush);
+    // Locations first: they are written to the database that `store` closes.
+    try {
+      locations.close();
+    } finally {
+      store.close();
+    }
   });
 
   // The container health check polls this every 30 s; keep its requests out
@@ -94,6 +122,8 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
     entry: config.hausViewerEntry ?? 'viewer.html',
     sessions,
   });
+
+  registerLocationRoutes(app, { store: locations, now });
 
   registerUpdateRoutes(app, {
     dir: config.updatesDir,

@@ -40,6 +40,7 @@ export const ApiErrorCode = z.enum([
   'haus_unavailable',
   'rate_limited',
   'unauthenticated',
+  'forbidden',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCode>;
 

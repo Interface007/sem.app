@@ -18,8 +18,24 @@ describe('loadConfig', () => {
       nas: { kind: 'none' },
       dataDir: undefined,
       sessionTtlDays: 30,
+      locationMaxAgeHours: 24,
+      locationFlushSeconds: 60,
       trustProxy: false,
     });
+  });
+
+  it('reads location settings', () => {
+    expect(
+      loadConfig({ LOCATION_MAX_AGE_HOURS: '48', LOCATION_FLUSH_SECONDS: '30' }),
+    ).toMatchObject({ locationMaxAgeHours: 48, locationFlushSeconds: 30 });
+  });
+
+  it.each([
+    { LOCATION_MAX_AGE_HOURS: '0' },
+    { LOCATION_FLUSH_SECONDS: '0' },
+    { LOCATION_FLUSH_SECONDS: 'x' },
+  ])('rejects invalid location settings %j', (env) => {
+    expect(() => loadConfig(env)).toThrow(/Invalid configuration/);
   });
 
   it('reads session settings', () => {
@@ -78,6 +94,8 @@ describe('loadConfig', () => {
       nas: { kind: 'none' },
       dataDir: undefined,
       sessionTtlDays: 30,
+      locationMaxAgeHours: 24,
+      locationFlushSeconds: 60,
       trustProxy: false,
     });
   });
