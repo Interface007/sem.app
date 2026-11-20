@@ -1,0 +1,26 @@
+# Opens the family map from the start page (see README.md); runs in no CI yet.
+# Run: maestro test -e SEM_USER=<name> -e SEM_PASSWORD=<password> e2e/android/familie.yaml
+appId: cloud.matzen.sem
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: login-username
+- inputText: ${SEM_USER}
+- tapOn:
+    id: login-password
+- inputText: ${SEM_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: login-submit
+- assertVisible:
+    id: tile-familie
+- tapOn:
+    id: tile-familie
+# The map needs the internet; the list shows one entry per sharing device (or a hint).
+- extendedWaitUntil:
+    visible:
+      id: family-map
+    timeout: 15000
+- assertVisible:
+    id: family-list

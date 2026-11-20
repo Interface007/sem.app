@@ -55,6 +55,19 @@ function Navigation() {
             ),
           }}
         />
+        <Tabs.Screen
+          name="familie"
+          options={{
+            title: 'Familie',
+            // Reached via the tile on the start page, not via the tab bar.
+            href: null,
+            headerLeft: () => (
+              <Link href="/" accessibilityLabel="Zurück zur Startseite" style={styles.back}>
+                ‹ Start
+              </Link>
+            ),
+          }}
+        />
         <Tabs.Screen name="scan" options={{ title: 'Scan' }} />
         <Tabs.Screen name="einstellungen" options={{ title: 'Einstellungen' }} />
       </Tabs.Protected>

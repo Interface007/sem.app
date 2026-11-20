@@ -14,6 +14,12 @@ export default function StartScreen() {
           testID="tile-haus"
           onPress={() => router.push('/haus')}
         />
+        <Tile
+          title="Familie"
+          subtitle="Standorte"
+          testID="tile-familie"
+          onPress={() => router.push('/familie')}
+        />
       </TileGrid>
       <HealthStatus />
     </View>
