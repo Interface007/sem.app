@@ -21,3 +21,12 @@ maestro test -e SEM_USER=<benutzername> -e SEM_PASSWORD=<passwort> e2e/android/a
 Der Ablauf löscht den App-Zustand, prüft die Anmeldemaske samt Server-Status,
 meldet an, prüft die Tabs und die Einstellungen und meldet wieder ab. Das
 Passwort nur über die Umgebung übergeben, nie in die Datei schreiben.
+
+## Familie
+
+```sh
+maestro test -e SEM_USER=<benutzername> -e SEM_PASSWORD=<passwort> e2e/android/familie.yaml
+```
+
+Der Ablauf meldet an, öffnet die Kachel „Familie“ und prüft, dass Karte und
+Liste sichtbar sind. Die Karte lädt ihre Kacheln aus dem Internet.
