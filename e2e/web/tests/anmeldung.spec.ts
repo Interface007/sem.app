@@ -100,6 +100,17 @@ test('logout leads back to the login form', async ({ page }) => {
   await expect(page.getByRole('tab', { name: 'Start' })).toHaveCount(0);
 });
 
+test('the settings do not show the location sharing in the web version', async ({ page }) => {
+  await mockLogin(page, () => loginOk());
+  await page.goto('/');
+  await fillAndSubmit(page, 'richtig');
+
+  await page.getByRole('tab', { name: 'Einstellungen' }).click();
+  await expect(page.getByTestId('session-user')).toBeVisible();
+  await expect(page.getByText('Standort teilen')).toHaveCount(0);
+  await expect(page.getByTestId('location-sharing')).toHaveCount(0);
+});
+
 test('an unreachable server offers a retry', async ({ page }) => {
   await page.route('**/api/auth/session', (route) => route.abort('connectionrefused'));
   await page.goto('/');

@@ -1,6 +1,9 @@
 import type { User } from '@sem/contracts';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Platform } from 'react-native';
+import { locationSharing } from './location/adapter';
+import { logoutStoppingSharing } from './location/logout';
 import type { LoginResult } from './session';
 import { session } from './sessionClient';
 
@@ -48,7 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return result;
       },
       async logout() {
-        await session.logout();
+        // Android: stop sharing and delete the position while the token still exists.
+        if (Platform.OS === 'android') {
+          await logoutStoppingSharing(locationSharing, () => session.logout());
+        } else {
+          await session.logout();
+        }
         setState({ status: 'signedOut' });
       },
       retry() {

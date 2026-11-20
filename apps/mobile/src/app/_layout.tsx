@@ -1,10 +1,19 @@
 import { Link, Tabs } from 'expo-router';
-import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { ActivityIndicator, Button, Platform, StyleSheet, Text, View } from 'react-native';
 import { BuildFooter } from '../components/BuildFooter';
 import { AuthProvider, useAuth } from '../lib/AuthProvider';
+import { locationSharing } from '../lib/location/adapter';
+// Registers the background task; it must exist even when Android starts the app without UI.
+import '../lib/location/task';
 
 function Navigation() {
   const { state, retry } = useAuth();
+  const signedIn = state.status === 'signedIn';
+
+  useEffect(() => {
+    if (Platform.OS === 'android') void locationSharing.resume(signedIn);
+  }, [signedIn]);
 
   if (state.status === 'checking') {
     return (
@@ -22,7 +31,6 @@ function Navigation() {
     );
   }
 
-  const signedIn = state.status === 'signedIn';
   return (
     <Tabs
       screenOptions={{ tabBarIconStyle: { display: 'none' } }}

@@ -1,0 +1,42 @@
+# Location sharing against a real server and a real phone (see README.md). Not run in any CI yet.
+# Run: maestro test -e SEM_USER=<name> -e SEM_PASSWORD=<password> e2e/android/standort.yaml
+appId: cloud.matzen.sem
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: login-username
+- inputText: ${SEM_USER}
+- tapOn:
+    id: login-password
+- inputText: ${SEM_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: login-submit
+- tapOn: Einstellungen
+- assertVisible:
+    id: location-status
+- tapOn:
+    id: location-sharing
+# Permission dialogs: location while in use, notifications, then background location.
+- tapOn:
+    text: "(Während der App-Nutzung|While using the app)"
+    optional: true
+- tapOn:
+    text: "(Zulassen|Allow)"
+    optional: true
+- tapOn:
+    text: "(Immer zulassen|Allow all the time)"
+    optional: true
+- back
+- assertVisible:
+    id: location-sharing
+# Within ~15 s the status line shows a time of day (HH:MM:SS).
+- extendedWaitUntil:
+    visible:
+      id: location-status
+      text: "Zuletzt gesendet: [0-9]{2}:[0-9]{2}:[0-9]{2}"
+    timeout: 30000
+# Clean up: switch sharing off again.
+- tapOn:
+    id: location-sharing
