@@ -5,7 +5,7 @@ import { HausViewer } from '../components/HausViewer';
 import { currentServerUrl } from '../lib/apiFetch';
 import { fetchViewerInfo } from '../lib/haus';
 import { session } from '../lib/sessionClient';
-import { buildViewerUrl, viewerOrigin } from '../lib/viewerUrl';
+import { appOrigin, buildViewerUrl, viewerOrigin } from '../lib/viewerUrl';
 
 type State =
   | { status: 'loading' }
@@ -20,18 +20,22 @@ export default function HausScreen() {
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
-    const info = await fetchViewerInfo(session.authFetch);
-    if (info.status !== 'available') {
-      setState({ status: info.status });
-      return;
+    // Anything unexpected ends as "unreachable"; the spinner must never stay.
+    try {
+      const info = await fetchViewerInfo(session.authFetch);
+      if (info.status !== 'available') {
+        setState({ status: info.status });
+        return;
+      }
+      const server = currentServerUrl() ?? '';
+      setState({
+        status: 'available',
+        uri: buildViewerUrl(server, info.path),
+        origin: viewerOrigin(server, appOrigin(globalThis)),
+      });
+    } catch {
+      setState({ status: 'unreachable' });
     }
-    const server = currentServerUrl() ?? '';
-    const ownOrigin = typeof window === 'undefined' ? '' : window.location.origin;
-    setState({
-      status: 'available',
-      uri: buildViewerUrl(server, info.path),
-      origin: viewerOrigin(server, ownOrigin),
-    });
   }, []);
 
   useEffect(() => {

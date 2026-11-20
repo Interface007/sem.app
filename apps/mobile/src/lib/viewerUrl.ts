@@ -11,6 +11,15 @@ export function viewerOrigin(serverUrl: string, ownOrigin: string): string {
   return serverUrl === '' ? ownOrigin : new URL(serverUrl).origin;
 }
 
+/**
+ * Origin the app itself runs on, `''` when it has none. Pass `globalThis`:
+ * on the web that carries `location`, while React Native defines `window`
+ * without a `location`, so reading `window.location.origin` would throw there.
+ */
+export function appOrigin(scope: { location?: { origin?: string } }): string {
+  return scope.location?.origin ?? '';
+}
+
 /** Whether the WebView may navigate to `url`: only to the server origin. */
 export function isAllowedNavigation(url: string, origin: string): boolean {
   try {
