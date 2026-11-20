@@ -38,6 +38,7 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   haus_unavailable: 'Das Haus-Modell ist derzeit nicht erreichbar.',
   rate_limited: 'Zu viele Fehlversuche. Bitte später erneut versuchen.',
   unauthenticated: 'Bitte anmelden.',
+  forbidden: 'Dieser Eintrag gehört einem anderen Benutzer.',
 };
 
 const FAILURES: Record<NasLoginFailure, { status: number; code: ApiErrorCode }> = {

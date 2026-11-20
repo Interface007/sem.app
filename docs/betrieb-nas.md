@@ -105,6 +105,8 @@ Passwort) und überlebt damit Neustarts des Containers.
 |---|---|
 | `DATA_DIR` | Ordner für `sem.db`, im Beispiel `/data`; ohne Angabe liegen Sitzungen nur im Speicher und der Start warnt |
 | `SESSION_TTL_DAYS` | Tage ohne Nutzung bis zum Ablauf, Vorgabe `30` |
+| `LOCATION_MAX_AGE_HOURS` | Stunden, nach denen eine Standortmeldung nicht mehr ausgeliefert und gelöscht wird, Vorgabe `24` |
+| `LOCATION_FLUSH_SECONDS` | Höchstens alle so viele Sekunden werden Standorte in `sem.db` geschrieben (und beim Herunterfahren), Vorgabe `60`; schont die Platten |
 | `TRUST_PROXY` | `true` hinter dem DSM-Reverse-Proxy, damit `X-Forwarded-Proto` zählt und das Cookie bei HTTPS `Secure` ist; Vorgabe `false` |
 
 * Der Ordner `docker/sem-server/data` (neben `compose.yaml`) muss vor dem
