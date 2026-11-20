@@ -98,3 +98,18 @@ describe('resolved Expo config updates', () => {
     expect(updates?.url).toBeUndefined();
   });
 });
+
+describe('resolved Expo config location sharing', () => {
+  it('enables background location and the foreground service in the plugin', () => {
+    const plugin = config.plugins?.find((p) => Array.isArray(p) && p[0] === 'expo-location');
+    expect(plugin).toEqual([
+      'expo-location',
+      { isAndroidBackgroundLocationEnabled: true, isAndroidForegroundServiceEnabled: true },
+    ]);
+  });
+
+  it('declares only the notification permission the plugin does not add', () => {
+    // The plugin adds location (coarse, fine, background) and foreground service permissions.
+    expect(config.android?.permissions).toEqual(['android.permission.POST_NOTIFICATIONS']);
+  });
+});

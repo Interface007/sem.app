@@ -1,6 +1,7 @@
 import * as Updates from 'expo-updates';
 import { useState } from 'react';
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { Button, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { LocationSharingSection } from '../components/LocationSharingSection';
 import { useAuth } from '../lib/AuthProvider';
 import {
   checkAndApplyUpdate,
@@ -21,7 +22,7 @@ export default function EinstellungenScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Einstellungen</Text>
       {state.status === 'signedIn' && (
         <Text testID="session-user">Angemeldet als {state.user.name}</Text>
@@ -37,11 +38,12 @@ export default function EinstellungenScreen() {
       </Text>
       <Button title="Nach Updates suchen" onPress={check} disabled={busy || !Updates.isEnabled} />
       {message !== '' && <Text testID="update-message">{message}</Text>}
-    </View>
+      {Platform.OS === 'android' && <LocationSharingSection />}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 16 },
+  container: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 16 },
   title: { fontSize: 20, fontWeight: '600' },
 });
