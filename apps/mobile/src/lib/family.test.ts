@@ -147,10 +147,9 @@ describe('fetchLocations', () => {
       ok: false,
       error: 'HTTP 500',
     });
-    await expect(fetchLocations(respond(200, { locations: [{}] }))).resolves.toEqual({
-      ok: false,
-      error: 'invalid',
-    });
+    const invalid = await fetchLocations(respond(200, { locations: [{}] }));
+    expect(invalid.ok).toBe(false);
+    expect(!invalid.ok && invalid.error).toMatch(/^invalid: locations\.0\.\w+: /);
     const failing = vi.fn(async () => {
       throw new Error('offline');
     });

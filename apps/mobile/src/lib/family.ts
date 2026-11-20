@@ -97,7 +97,13 @@ export async function fetchLocations(
     const response = await fetcher('/api/locations');
     if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
     const parsed = LocationList.safeParse(await response.json());
-    if (!parsed.success) return { ok: false, error: 'invalid' };
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .slice(0, 3)
+        .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+        .join('; ');
+      return { ok: false, error: `invalid: ${issues}` };
+    }
     return { ok: true, locations: sortLocations(parsed.data.locations) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

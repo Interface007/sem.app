@@ -122,6 +122,7 @@ test('an error shows the error text and can be retried', async ({ page }) => {
   await expect(page.getByTestId('family-error')).toContainText(
     'Standorte konnten nicht geladen werden.',
   );
+  await expect(page.getByTestId('family-error-reason')).toHaveText('HTTP 500');
 
   status = undefined;
   await page.getByText('Erneut versuchen').click();
