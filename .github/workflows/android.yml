@@ -160,10 +160,25 @@ jobs:
         # arm64 only: every current Android phone; saves three native builds.
         # The configuration cache stays inside the run: it would store the
         # signing secrets, and versionName changes every run anyway.
-        run: >-
-          ./gradlew assembleRelease --no-daemon
-          --build-cache --configuration-cache --configuration-cache-problems=warn
-          -PreactNativeArchitectures=arm64-v8a
+        # A cold Gradle cache has to fetch the foojay resolver plugin that
+        # React Native's own settings file applies, and the plugin portal
+        # drops that request often enough to turn builds red. Only a failed
+        # download is retried; a compile error still fails on the spot.
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/gradle-assemble.log"
+          for attempt in 1 2; do
+            if ./gradlew assembleRelease --no-daemon \
+                --build-cache --configuration-cache --configuration-cache-problems=warn \
+                -PreactNativeArchitectures=arm64-v8a 2>&1 | tee "$log"; then
+              exit 0
+            fi
+            if ! grep -qE 'was not found in any of the following sources|Could not (GET|resolve|download)' "$log"; then
+              exit 1
+            fi
+            echo "Attempt $attempt failed while downloading dependencies, retrying" >&2
+          done
+          exit 1
 
       - name: ccache statistics
         if: always()
