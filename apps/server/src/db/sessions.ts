@@ -1,6 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { SqliteLocationPersistence } from '../locations/sqlite.js';
+import type { LocationPersistence } from '../locations/store.js';
 
 /** Times are milliseconds since the epoch. */
 export interface StoredSession {
@@ -34,10 +36,12 @@ export interface SessionStore {
   /** Sets the key unless the session already has one. */
   setViewerKey(id: string, key: string): void;
   findByViewerKey(key: string): { id: string; expiresAt: number } | undefined;
+  /** Persistence of the latest locations, kept in the same database. */
+  readonly locations: LocationPersistence;
   close(): void;
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 interface SessionRow {
   id: string;
@@ -82,7 +86,26 @@ export class SqliteSessionStore implements SessionStore {
         CREATE UNIQUE INDEX sessions_viewer_key ON sessions (viewer_key);
       `);
     }
+    if (row.user_version < 3) {
+      this.db.exec(`
+        CREATE TABLE locations (
+          username TEXT NOT NULL,
+          device_id TEXT NOT NULL,
+          device_name TEXT NOT NULL,
+          latitude REAL NOT NULL,
+          longitude REAL NOT NULL,
+          accuracy REAL,
+          recorded_at INTEGER NOT NULL,
+          received_at INTEGER NOT NULL,
+          PRIMARY KEY (username, device_id)
+        );
+      `);
+    }
     this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  }
+
+  get locations(): LocationPersistence {
+    return new SqliteLocationPersistence(this.db);
   }
 
   create(session: NewSession): void {

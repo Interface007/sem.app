@@ -59,6 +59,10 @@ const EnvSchema = z
     DATA_DIR: z.string().min(1).optional(),
     /** Days without use until an app session expires. */
     SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
+    /** Hours until a location is no longer served and is deleted. */
+    LOCATION_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(8760).default(24),
+    /** Minimum seconds between writes of the locations to the database. */
+    LOCATION_FLUSH_SECONDS: z.coerce.number().int().min(1).max(86400).default(60),
     /** Honour `X-Forwarded-*` (set behind the DSM reverse proxy). */
     TRUST_PROXY: z
       .enum(['true', 'false'])
@@ -100,6 +104,8 @@ export interface Config {
   nas: NasConfig;
   dataDir: string | undefined;
   sessionTtlDays: number;
+  locationMaxAgeHours: number;
+  locationFlushSeconds: number;
   trustProxy: boolean;
 }
 
@@ -131,6 +137,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     nas,
     dataDir: e.DATA_DIR,
     sessionTtlDays: e.SESSION_TTL_DAYS,
+    locationMaxAgeHours: e.LOCATION_MAX_AGE_HOURS,
+    locationFlushSeconds: e.LOCATION_FLUSH_SECONDS,
     trustProxy: e.TRUST_PROXY,
   };
 }
