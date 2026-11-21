@@ -57,6 +57,7 @@ jobs:
           docker build -f apps/server/Dockerfile --platform linux/amd64 \
             --build-arg APP_VERSION="$version" \
             --build-arg GIT_COMMIT="${GITHUB_SHA::7}" \
+            --build-arg EXPO_PUBLIC_SERVER_URL="${{ vars.SEM_SERVER_URL }}" \
             -t sem-server:ci .
 
       - name: Start container
