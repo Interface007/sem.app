@@ -5,6 +5,10 @@ import { type ConfigPlugin, withAndroidManifest } from 'expo/config-plugins';
  * the matching permissions and a declared service type. expo-location adds them
  * through its plugin options; this plugin guarantees them regardless, so the
  * app cannot crash when the system restarts the service.
+ *
+ * expo-task-manager schedules a persisted JobScheduler job for every location
+ * update the background task receives. Android rejects persisted jobs without
+ * RECEIVE_BOOT_COMPLETED and the app crashes natively on start (#46).
  */
 
 const PERMISSIONS = [
@@ -12,6 +16,7 @@ const PERMISSIONS = [
   'android.permission.FOREGROUND_SERVICE_LOCATION',
   'android.permission.ACCESS_BACKGROUND_LOCATION',
   'android.permission.POST_NOTIFICATIONS',
+  'android.permission.RECEIVE_BOOT_COMPLETED',
 ];
 
 const SERVICE_NAME = 'expo.modules.location.services.LocationTaskService';
@@ -35,8 +40,12 @@ export function ensureLocationService<T extends AndroidManifestLike>(androidMani
 
   const permissions = (manifest['uses-permission'] ??= []);
   for (const name of PERMISSIONS) {
-    if (!permissions.some((p) => p.$['android:name'] === name)) {
+    const existing = permissions.find((p) => p.$['android:name'] === name);
+    if (!existing) {
       permissions.push({ $: { 'android:name': name } });
+    } else if (existing.$['tools:node'] === 'remove') {
+      // A blocked permission would otherwise be stripped again by the manifest merger.
+      delete existing.$['tools:node'];
     }
   }
 
