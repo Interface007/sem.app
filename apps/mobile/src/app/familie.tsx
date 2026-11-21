@@ -108,7 +108,8 @@ export default function FamilieScreen() {
           locations={locations}
           styleUrl={styleUrl}
           {...(focus ? { focus } : {})}
-          dom={{ style: styles.dom }}
+          // Debugging lets chrome://inspect show the map's console and network.
+          dom={{ style: styles.dom, webviewDebuggingEnabled: true }}
         />
       </View>
       <FlatList

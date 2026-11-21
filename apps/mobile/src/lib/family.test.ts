@@ -1,8 +1,11 @@
 import type { FamilyLocation } from '@sem/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  addMapError,
   boundingBox,
   DEFAULT_MAP_STYLE_URL,
+  describeMapError,
+  MAX_MAP_ERRORS,
   fetchLocations,
   formatAccuracy,
   formatAge,
@@ -154,5 +157,41 @@ describe('fetchLocations', () => {
       throw new Error('offline');
     });
     await expect(fetchLocations(failing)).resolves.toEqual({ ok: false, error: 'offline' });
+  });
+});
+
+describe('describeMapError', () => {
+  it('names the source of a MapLibre error event', () => {
+    const event = { error: new TypeError('Failed to fetch'), sourceId: 'openmaptiles' };
+    expect(describeMapError(event)).toBe('[openmaptiles] TypeError: Failed to fetch');
+  });
+
+  it('reads an event without a source', () => {
+    expect(describeMapError({ error: new Error('boom') })).toBe('Error: boom');
+  });
+
+  it('accepts plain errors, strings and other values', () => {
+    expect(describeMapError(new RangeError('too far'))).toBe('RangeError: too far');
+    expect(describeMapError('worker died')).toBe('worker died');
+    expect(describeMapError(42)).toBe('42');
+  });
+});
+
+describe('addMapError', () => {
+  it('adds a new message at the end', () => {
+    expect(addMapError(['a'], 'b')).toEqual(['a', 'b']);
+  });
+
+  it('does not repeat a message and does not change the input', () => {
+    const list = ['a', 'b'];
+    const result = addMapError(list, 'a');
+    expect(result).toEqual(['a', 'b']);
+    expect(result).not.toBe(list);
+  });
+
+  it(`keeps only the newest ${MAX_MAP_ERRORS}`, () => {
+    let list: string[] = [];
+    for (const message of ['1', '2', '3', '4', '5']) list = addMapError(list, message);
+    expect(list).toEqual(['3', '4', '5']);
   });
 });

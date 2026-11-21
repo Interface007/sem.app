@@ -4,8 +4,15 @@ import type { FamilyLocation } from '@sem/contracts';
 import { IS_DOM, type DOMProps } from 'expo/dom';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useEffect, useRef } from 'react';
-import { boundingBox, formatAccuracy, formatAge, isStale } from '../lib/family';
+import { useEffect, useRef, useState } from 'react';
+import {
+  addMapError,
+  boundingBox,
+  describeMapError,
+  formatAccuracy,
+  formatAge,
+  isStale,
+} from '../lib/family';
 
 export interface FamilyMapProps {
   /** Positions to draw; the map never talks to the server. */
@@ -95,6 +102,24 @@ export default function FamilyMap({ locations, styleUrl, focus }: FamilyMapProps
   const fitted = useRef(false);
   const latest = useRef(locations);
   latest.current = locations;
+  // Shown on the map: on Android there is no other way to see why tiles fail.
+  const [errors, setErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    const report = (value: unknown) => {
+      const message = describeMapError(value);
+      console.warn(`Map error: ${message}`);
+      setErrors((list) => addMapError(list, message));
+    };
+    const onError = (event: ErrorEvent) => report(event.error ?? event.message);
+    const onRejection = (event: PromiseRejectionEvent) => report(event.reason);
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+    };
+  }, []);
 
   useEffect(() => {
     if (container.current === null) return;
@@ -114,6 +139,11 @@ export default function FamilyMap({ locations, styleUrl, focus }: FamilyMapProps
       }),
     );
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    instance.on('error', (event) => {
+      const message = describeMapError(event);
+      console.warn(`Map error: ${message}`);
+      setErrors((list) => addMapError(list, message));
+    });
     map.current = instance;
     const entries = markers.current;
     fitted.current = false;
@@ -190,6 +220,29 @@ export default function FamilyMap({ locations, styleUrl, focus }: FamilyMapProps
       >
         Alle anzeigen
       </button>
+      {errors.length > 0 && (
+        <div
+          data-testid="family-map-error"
+          style={{
+            position: 'absolute',
+            top: 52,
+            left: 10,
+            right: 60,
+            padding: '6px 8px',
+            font: '12px sans-serif',
+            color: '#7a0000',
+            background: 'rgba(255,235,235,.95)',
+            border: '1px solid #d99',
+            borderRadius: 6,
+            wordBreak: 'break-word',
+          }}
+        >
+          <strong>Kartenfehler</strong>
+          {errors.map((message) => (
+            <div key={message}>{message}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
