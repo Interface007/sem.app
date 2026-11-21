@@ -1,4 +1,8 @@
-import { FOREGROUND_NOTIFICATION, LOCATION_INTERVAL_MS } from './constants';
+import {
+  FOREGROUND_NOTIFICATION,
+  LOCATION_INTERVAL_LABELS,
+  type LocationIntervalMs,
+} from './constants';
 import type { SharingSettings } from './settings';
 
 export type DeniedPermission = 'foreground' | 'notifications' | 'background';
@@ -39,18 +43,26 @@ export interface LocationSharing {
   enable(): Promise<EnableResult>;
   /** Stops the updates, deletes the position on the server (errors ignored), remembers "off". */
   disable(): Promise<void>;
+  /** Stores the interval; if sharing is on, restarts the updates with it (stop → start) without switching off. */
+  setInterval(interval: LocationIntervalMs): Promise<void>;
   /** App start: restarts the updates if sharing is on, the user is signed in and the task is not running. */
   resume(signedIn: boolean): Promise<void>;
   /** Before sign-out, while the token still exists: like `disable`, but only if sharing is on. */
   stopForLogout(): Promise<void>;
 }
 
-const UPDATES_OPTIONS: UpdatesOptions = {
-  timeInterval: LOCATION_INTERVAL_MS,
-  distanceInterval: 0,
-  deferredUpdatesInterval: LOCATION_INTERVAL_MS,
-  foregroundService: { ...FOREGROUND_NOTIFICATION, killServiceOnDestroy: false },
-};
+function updatesOptions(interval: LocationIntervalMs): UpdatesOptions {
+  return {
+    timeInterval: interval,
+    distanceInterval: 0,
+    deferredUpdatesInterval: interval,
+    foregroundService: {
+      ...FOREGROUND_NOTIFICATION,
+      notificationBody: `Der Standort wird ${LOCATION_INTERVAL_LABELS[interval]} an den Familien-Server gesendet.`,
+      killServiceOnDestroy: false,
+    },
+  };
+}
 
 /** Error name only: messages could contain location data. */
 function errorName(error: unknown): string {
@@ -85,12 +97,18 @@ export function createLocationSharing({ api, settings, authFetch }: SharingDeps)
       if (!(await api.requestNotifications())) return { ok: false, denied: 'notifications' };
       if (!(await api.requestBackground())) return { ok: false, denied: 'background' };
       await settings.getDeviceId();
-      await api.startUpdates(UPDATES_OPTIONS);
+      await api.startUpdates(updatesOptions(await settings.getInterval()));
       await settings.setEnabled(true);
       await settings.setStoppedByError(false);
       return { ok: true };
     },
     disable,
+    async setInterval(interval) {
+      await settings.setInterval(interval);
+      if (!(await settings.isEnabled())) return;
+      await api.stopUpdates();
+      await api.startUpdates(updatesOptions(interval));
+    },
     async resume(signedIn) {
       // Never throws: a failure here must not take the app down at start.
       try {
@@ -100,7 +118,7 @@ export function createLocationSharing({ api, settings, authFetch }: SharingDeps)
           await switchOffAfterFailure();
           return;
         }
-        await api.startUpdates(UPDATES_OPTIONS);
+        await api.startUpdates(updatesOptions(await settings.getInterval()));
       } catch (error) {
         console.warn('location sharing: restart failed', errorName(error));
         try {

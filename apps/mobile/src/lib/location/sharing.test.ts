@@ -1,6 +1,6 @@
 import { DeviceId } from '@sem/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { LOCATION_INTERVAL_MS } from './constants';
+import { LOCATION_INTERVALS_MS } from './constants';
 import { logoutStoppingSharing } from './logout';
 import { createSharingSettings, randomUuid } from './settings';
 import { createLocationSharing, type LocationApi } from './sharing';
@@ -46,17 +46,25 @@ describe('enable', () => {
     expect(await sharing.enable()).toEqual({ ok: true });
     expect(calls).toEqual(['foreground', 'notifications', 'background', 'start']);
     expect(api.startUpdates).toHaveBeenCalledWith({
-      timeInterval: LOCATION_INTERVAL_MS,
+      timeInterval: 10_000,
       distanceInterval: 0,
-      deferredUpdatesInterval: LOCATION_INTERVAL_MS,
+      deferredUpdatesInterval: 10_000,
       foregroundService: {
         notificationTitle: 'sem teilt deinen Standort',
-        notificationBody: 'Der Standort wird regelmäßig an den Familien-Server gesendet.',
+        notificationBody: 'Der Standort wird alle 10 Sekunden an den Familien-Server gesendet.',
         killServiceOnDestroy: false,
       },
     });
-    expect(LOCATION_INTERVAL_MS).toBe(10_000);
     expect(await settings.isEnabled()).toBe(true);
+  });
+
+  it.each(LOCATION_INTERVALS_MS)('starts with the stored interval %d ms', async (interval) => {
+    const { sharing, api, settings } = setup();
+    await settings.setInterval(interval);
+    await sharing.enable();
+    expect(api.startUpdates).toHaveBeenCalledWith(
+      expect.objectContaining({ timeInterval: interval, deferredUpdatesInterval: interval }),
+    );
   });
 
   it.each(['foreground', 'notifications', 'background'] as const)(
@@ -150,6 +158,79 @@ describe('resume', () => {
     vi.mocked(api.startUpdates).mockRejectedValue(new Error('boom'));
     vi.spyOn(settings, 'setEnabled').mockRejectedValue(new Error('locked'));
     await expect(sharing.resume(true)).resolves.toBeUndefined();
+  });
+});
+
+describe('resume with interval', () => {
+  it('uses the stored interval', async () => {
+    const { sharing, api, settings } = setup();
+    await settings.setEnabled(true);
+    await settings.setInterval(3_600_000);
+    await sharing.resume(true);
+    expect(api.startUpdates).toHaveBeenCalledWith(
+      expect.objectContaining({ timeInterval: 3_600_000, deferredUpdatesInterval: 3_600_000 }),
+    );
+  });
+});
+
+describe('setInterval', () => {
+  it('restarts running updates with the new interval and keeps sharing on', async () => {
+    const { sharing, api, settings, calls } = setup();
+    await sharing.enable();
+    calls.length = 0;
+    await sharing.setInterval(600_000);
+
+    expect(calls).toEqual(['stop', 'start']);
+    expect(api.startUpdates).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        timeInterval: 600_000,
+        deferredUpdatesInterval: 600_000,
+        foregroundService: expect.objectContaining({
+          notificationBody: 'Der Standort wird alle 10 Minuten an den Familien-Server gesendet.',
+        }),
+      }),
+    );
+    expect(await settings.isEnabled()).toBe(true);
+    expect(await settings.getInterval()).toBe(600_000);
+  });
+
+  it('only stores the interval while sharing is off', async () => {
+    const { sharing, api, settings } = setup();
+    await sharing.setInterval(3_600_000);
+    expect(api.stopUpdates).not.toHaveBeenCalled();
+    expect(api.startUpdates).not.toHaveBeenCalled();
+    expect(await settings.getInterval()).toBe(3_600_000);
+  });
+});
+
+describe('interval setting', () => {
+  function storeWith(value?: string) {
+    const data = new Map<string, string>();
+    if (value !== undefined) data.set('sem_location_interval', value);
+    return {
+      data,
+      settings: createSharingSettings(
+        {
+          get: async (key) => data.get(key) ?? null,
+          set: async (key, v) => void data.set(key, v),
+        },
+        randomUuid,
+      ),
+    };
+  }
+
+  it.each([undefined, '', 'abc', '5000', '-10000', '0'])(
+    'falls back to 10 s for %s',
+    async (stored) => {
+      expect(await storeWith(stored).settings.getInterval()).toBe(10_000);
+    },
+  );
+
+  it.each(LOCATION_INTERVALS_MS)('round-trips %d ms through the store', async (interval) => {
+    const { data, settings } = storeWith();
+    await settings.setInterval(interval);
+    expect(data.get('sem_location_interval')).toBe(String(interval));
+    expect(await settings.getInterval()).toBe(interval);
   });
 });
 
