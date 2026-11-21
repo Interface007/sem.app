@@ -1,7 +1,7 @@
 'use dom';
 
 import type { FamilyLocation } from '@sem/contracts';
-import type { DOMProps } from 'expo/dom';
+import { IS_DOM, type DOMProps } from 'expo/dom';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef } from 'react';
@@ -18,6 +18,15 @@ export interface FamilyMapProps {
 }
 
 const SINGLE_MARKER_ZOOM = 15;
+
+/**
+ * Inside the Android WebView, `html` and `body` have no height, so `100%`
+ * resolves to 0 and MapLibre clips everything; fill the viewport there.
+ * In the browser the component sits in a sized parent and `100%` works.
+ */
+const OUTER_STYLE = IS_DOM
+  ? ({ position: 'fixed', inset: 0 } as const)
+  : ({ position: 'relative', width: '100%', height: '100%' } as const);
 
 interface MarkerEntry {
   marker: maplibregl.Marker;
@@ -161,7 +170,7 @@ export default function FamilyMap({ locations, styleUrl, focus }: FamilyMapProps
   }, [focus]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={OUTER_STYLE}>
       <div ref={container} style={{ position: 'absolute', inset: 0 }} />
       <button
         type="button"

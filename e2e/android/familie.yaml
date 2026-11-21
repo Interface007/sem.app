@@ -24,3 +24,8 @@ appId: cloud.matzen.sem
     timeout: 15000
 - assertVisible:
     id: family-list
+# MapLibre's zoom control lives inside the map container; it is only visible
+# when the container has a height inside the WebView.
+- extendedWaitUntil:
+    visible: "Zoom in"
+    timeout: 15000
