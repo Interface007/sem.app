@@ -44,6 +44,11 @@ const expoLocationApi: LocationApi = {
     }
   },
   hasStarted: () => Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME),
+  async hasPermissions() {
+    const foreground = await Location.getForegroundPermissionsAsync();
+    if (!foreground.granted) return false;
+    return (await Location.getBackgroundPermissionsAsync()).granted;
+  },
 };
 
 export const locationSharing = createLocationSharing({

@@ -25,6 +25,7 @@ function setup(
     startUpdates: vi.fn(async () => void calls.push('start')),
     stopUpdates: vi.fn(async () => void calls.push('stop')),
     hasStarted: vi.fn(async () => false),
+    hasPermissions: vi.fn(async () => true),
   };
   const authFetch = vi.fn(async (path: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? 'GET'} ${path}`);
@@ -105,6 +106,50 @@ describe('resume', () => {
     vi.mocked(api.hasStarted).mockResolvedValue(true);
     await sharing.resume(true);
     expect(api.startUpdates).not.toHaveBeenCalled();
+  });
+
+  it('does not start and switches off when a permission was revoked', async () => {
+    const { sharing, api, settings } = setup();
+    await settings.setEnabled(true);
+    vi.mocked(api.hasPermissions).mockResolvedValue(false);
+    await sharing.resume(true);
+    expect(api.startUpdates).not.toHaveBeenCalled();
+    expect(await settings.isEnabled()).toBe(false);
+    expect(await settings.wasStoppedByError()).toBe(true);
+  });
+
+  it('switches off when the restart fails, and enabling clears the notice', async () => {
+    const { sharing, api, settings } = setup();
+    await settings.setEnabled(true);
+    vi.mocked(api.startUpdates).mockRejectedValueOnce(new Error('FGS not allowed'));
+    await sharing.resume(true);
+    expect(await settings.isEnabled()).toBe(false);
+    expect(await settings.wasStoppedByError()).toBe(true);
+
+    await sharing.enable();
+    expect(await settings.wasStoppedByError()).toBe(false);
+  });
+
+  it.each(['isEnabled', 'hasStarted', 'startUpdates'] as const)(
+    'never throws when %s throws',
+    async (failing) => {
+      const { sharing, api, settings } = setup();
+      await settings.setEnabled(true);
+      if (failing === 'isEnabled') {
+        vi.spyOn(settings, 'isEnabled').mockRejectedValue(new Error('locked'));
+      } else {
+        vi.mocked(api[failing]).mockRejectedValue(new Error('boom'));
+      }
+      await expect(sharing.resume(true)).resolves.toBeUndefined();
+    },
+  );
+
+  it('never throws when even the storage fails', async () => {
+    const { sharing, api, settings } = setup();
+    await settings.setEnabled(true);
+    vi.mocked(api.startUpdates).mockRejectedValue(new Error('boom'));
+    vi.spyOn(settings, 'setEnabled').mockRejectedValue(new Error('locked'));
+    await expect(sharing.resume(true)).resolves.toBeUndefined();
   });
 });
 

@@ -22,6 +22,8 @@ export interface LocationApi {
   startUpdates(options: UpdatesOptions): Promise<void>;
   stopUpdates(): Promise<void>;
   hasStarted(): Promise<boolean>;
+  /** True while foreground and background location are still granted in the system settings. */
+  hasPermissions(): Promise<boolean>;
 }
 
 export interface SharingDeps {
@@ -50,6 +52,11 @@ const UPDATES_OPTIONS: UpdatesOptions = {
   foregroundService: { ...FOREGROUND_NOTIFICATION, killServiceOnDestroy: false },
 };
 
+/** Error name only: messages could contain location data. */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'unknown error';
+}
+
 export function createLocationSharing({ api, settings, authFetch }: SharingDeps): LocationSharing {
   async function disable(): Promise<void> {
     try {
@@ -66,6 +73,12 @@ export function createLocationSharing({ api, settings, authFetch }: SharingDeps)
     }
   }
 
+  /** Remembers "off" so the next start does not run into the same failure again. */
+  async function switchOffAfterFailure(): Promise<void> {
+    await settings.setEnabled(false);
+    await settings.setStoppedByError(true);
+  }
+
   return {
     async enable() {
       if (!(await api.requestForeground())) return { ok: false, denied: 'foreground' };
@@ -74,16 +87,27 @@ export function createLocationSharing({ api, settings, authFetch }: SharingDeps)
       await settings.getDeviceId();
       await api.startUpdates(UPDATES_OPTIONS);
       await settings.setEnabled(true);
+      await settings.setStoppedByError(false);
       return { ok: true };
     },
     disable,
     async resume(signedIn) {
-      if (!signedIn || !(await settings.isEnabled())) return;
-      if (await api.hasStarted()) return;
+      // Never throws: a failure here must not take the app down at start.
       try {
+        if (!signedIn || !(await settings.isEnabled())) return;
+        if (await api.hasStarted()) return;
+        if (!(await api.hasPermissions())) {
+          await switchOffAfterFailure();
+          return;
+        }
         await api.startUpdates(UPDATES_OPTIONS);
-      } catch {
-        // Permissions revoked in the system settings: nothing to do until the user acts.
+      } catch (error) {
+        console.warn('location sharing: restart failed', errorName(error));
+        try {
+          await switchOffAfterFailure();
+        } catch {
+          // Storage unavailable: the next start tries again.
+        }
       }
     },
     async stopForLogout() {
