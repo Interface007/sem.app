@@ -9,7 +9,7 @@ import type { TaskDeps } from './report';
 import { createSharingSettings, randomUuid } from './settings';
 import { createLocationSharing, type LocationApi } from './sharing';
 
-/** Counterpart of `LOCATION_INTERVAL_MS`: high accuracy means continuous GPS. */
+/** Counterpart of the send interval (`LOCATION_INTERVALS_MS`): high accuracy means continuous GPS. */
 export const LOCATION_ACCURACY = Location.Accuracy.High;
 
 export const sharingSettings = createSharingSettings(

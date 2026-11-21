@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Linking, StyleSheet, Switch, Text, View } from 'react-native';
 import { locationSharing, sharingSettings } from '../lib/location/adapter';
+import {
+  DEFAULT_LOCATION_INTERVAL_MS,
+  LOCATION_INTERVAL_LABELS,
+  LOCATION_INTERVALS_MS,
+  type LocationIntervalMs,
+} from '../lib/location/constants';
 import type { DeniedPermission } from '../lib/location/sharing';
 
 const EXPLANATION =
-  'Wenn eingeschaltet, sendet dieses Phone etwa alle 10 Sekunden seinen Standort an den Familien-Server – auch im Hintergrund. Alle angemeldeten Familienmitglieder sehen die letzte Position auf der Karte. Ein Verlauf wird nicht gespeichert. Das kostet spürbar Akku.';
+  'Wenn eingeschaltet, sendet dieses Phone im gewählten Intervall seinen Standort an den Familien-Server – auch im Hintergrund. Alle angemeldeten Familienmitglieder sehen die letzte Position auf der Karte. Ein Verlauf wird nicht gespeichert. Das kostet spürbar Akku.';
 
 const BATTERY_HINT =
   'Damit das Senden im Hintergrund nicht gestoppt wird: Samsung – Akku → ‚Nicht eingeschränkt‘ und die App nicht in den Standby versetzen lassen. Nothing Phone – Akkunutzung der App → ‚Nicht eingeschränkt‘.';
@@ -29,6 +35,9 @@ const STATUS_REFRESH_MS = 5_000;
 /** Android only: switch, explanation, permission hint and status of the location sharing. */
 export function LocationSharingSection() {
   const [enabled, setEnabled] = useState(false);
+  const [interval, setSelectedInterval] = useState<LocationIntervalMs>(
+    DEFAULT_LOCATION_INTERVAL_MS,
+  );
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState<DeniedPermission | undefined>();
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
@@ -36,6 +45,7 @@ export function LocationSharingSection() {
 
   const refresh = useCallback(async () => {
     setEnabled(await sharingSettings.isEnabled());
+    setSelectedInterval(await sharingSettings.getInterval());
     setLastSentAt(await sharingSettings.getLastSentAt());
     setStoppedByError(await sharingSettings.wasStoppedByError());
   }, []);
@@ -45,6 +55,17 @@ export function LocationSharingSection() {
     const timer = setInterval(() => void refresh(), STATUS_REFRESH_MS);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  async function selectInterval(next: LocationIntervalMs) {
+    setBusy(true);
+    try {
+      await locationSharing.setInterval(next);
+    } catch {
+      // Restarting failed (e.g. the system refused the service): the stored choice stays.
+    }
+    await refresh();
+    setBusy(false);
+  }
 
   async function toggle(next: boolean) {
     setBusy(true);
@@ -73,6 +94,19 @@ export function LocationSharingSection() {
         disabled={busy}
         onValueChange={(next) => void toggle(next)}
       />
+      <View style={styles.intervals} accessibilityRole="radiogroup">
+        {LOCATION_INTERVALS_MS.map((option) => (
+          <Button
+            key={option}
+            testID={`location-interval-${option}`}
+            title={`${option === interval ? '● ' : '○ '}${LOCATION_INTERVAL_LABELS[option]}`}
+            accessibilityLabel={LOCATION_INTERVAL_LABELS[option]}
+            accessibilityState={{ selected: option === interval }}
+            disabled={busy}
+            onPress={() => void selectInterval(option)}
+          />
+        ))}
+      </View>
       <Text style={styles.text}>{EXPLANATION}</Text>
       {denied !== undefined && (
         <Text testID="location-permission-hint" style={styles.text}>
@@ -97,6 +131,7 @@ export function LocationSharingSection() {
 
 const styles = StyleSheet.create({
   section: { alignItems: 'center', gap: 8, maxWidth: 480 },
+  intervals: { alignItems: 'center', gap: 4 },
   heading: { fontSize: 16, fontWeight: '600' },
   text: { textAlign: 'center' },
 });

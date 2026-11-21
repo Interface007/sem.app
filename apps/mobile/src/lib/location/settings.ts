@@ -1,4 +1,9 @@
 import { DeviceId } from '@sem/contracts';
+import {
+  DEFAULT_LOCATION_INTERVAL_MS,
+  LOCATION_INTERVALS_MS,
+  type LocationIntervalMs,
+} from './constants';
 
 export interface KeyValueStore {
   get(key: string): Promise<string | null>;
@@ -14,6 +19,9 @@ export interface SharingSettings {
   /** True if sharing was switched off because restarting it failed; cleared by the next enable. */
   wasStoppedByError(): Promise<boolean>;
   setStoppedByError(stopped: boolean): Promise<void>;
+  /** Selected send interval; missing or invalid stored values give the 10 s default. */
+  getInterval(): Promise<LocationIntervalMs>;
+  setInterval(interval: LocationIntervalMs): Promise<void>;
   /** Random id of this installation; created once, then stable. */
   getDeviceId(): Promise<DeviceId>;
 }
@@ -21,6 +29,7 @@ export interface SharingSettings {
 const ENABLED_KEY = 'sem_location_sharing';
 const LAST_SENT_KEY = 'sem_location_last_sent';
 const STOPPED_BY_ERROR_KEY = 'sem_location_stopped_by_error';
+const INTERVAL_KEY = 'sem_location_interval';
 const DEVICE_ID_KEY = 'sem_device_id';
 
 export function createSharingSettings(
@@ -41,6 +50,13 @@ export function createSharingSettings(
       return (await store.get(STOPPED_BY_ERROR_KEY)) === 'true';
     },
     setStoppedByError: (stopped) => store.set(STOPPED_BY_ERROR_KEY, stopped ? 'true' : 'false'),
+    async getInterval() {
+      const value = Number(await store.get(INTERVAL_KEY));
+      return (
+        LOCATION_INTERVALS_MS.find((allowed) => allowed === value) ?? DEFAULT_LOCATION_INTERVAL_MS
+      );
+    },
+    setInterval: (interval) => store.set(INTERVAL_KEY, String(interval)),
     async getDeviceId() {
       const stored = DeviceId.safeParse(await store.get(DEVICE_ID_KEY));
       if (stored.success) return stored.data;
