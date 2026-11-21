@@ -25,8 +25,21 @@ describe('ensureLocationService', () => {
         'android.permission.FOREGROUND_SERVICE_LOCATION',
         'android.permission.ACCESS_BACKGROUND_LOCATION',
         'android.permission.POST_NOTIFICATIONS',
+        'android.permission.RECEIVE_BOOT_COMPLETED',
       ]),
     );
+  });
+
+  it('unblocks a permission that the config marked for removal', () => {
+    const blocked = manifest();
+    blocked.manifest['uses-permission']?.push({
+      $: { 'android:name': 'android.permission.RECEIVE_BOOT_COMPLETED', 'tools:node': 'remove' },
+    });
+    const entries = (ensureLocationService(blocked).manifest['uses-permission'] ?? []).filter(
+      (p) => p.$['android:name'] === 'android.permission.RECEIVE_BOOT_COMPLETED',
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.$['tools:node']).toBeUndefined();
   });
 
   it('declares the service with foregroundServiceType="location"', () => {
