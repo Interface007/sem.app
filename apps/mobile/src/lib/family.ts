@@ -71,6 +71,33 @@ export function boundingBox(points: readonly Point[]): Bounds | undefined {
   return bounds;
 }
 
+/** How many distinct map errors the screen keeps. */
+export const MAX_MAP_ERRORS = 3;
+
+/**
+ * One line for a MapLibre `error` event or a value thrown in the map
+ * (`{ error, sourceId }`, an `Error`, or anything else).
+ */
+export function describeMapError(value: unknown): string {
+  let source: string | undefined;
+  let error = value;
+  if (typeof value === 'object' && value !== null && 'error' in value) {
+    error = value.error;
+    if ('sourceId' in value && typeof value.sourceId === 'string') source = value.sourceId;
+  }
+  let text: string;
+  if (error instanceof Error) text = `${error.name}: ${error.message}`;
+  else if (typeof error === 'string') text = error;
+  else text = String(error);
+  return source === undefined ? text : `[${source}] ${text}`;
+}
+
+/** Adds `message` unless already listed; keeps the newest `MAX_MAP_ERRORS`. */
+export function addMapError(list: readonly string[], message: string): string[] {
+  if (list.includes(message)) return [...list];
+  return [...list, message].slice(-MAX_MAP_ERRORS);
+}
+
 const collator = new Intl.Collator('de');
 
 /** By user, then device name, then device id; does not change the input. */
