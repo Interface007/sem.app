@@ -45,6 +45,10 @@ describe('house viewer pass-through', () => {
   let sourceBase: string;
   let app: FastifyInstance;
   let logLines: string[];
+  /** What the source sends as Cache-Control; undefined sends none. */
+  let sourceCacheControl: string | undefined;
+  let sourceEtag: string;
+  let sourceBody: string;
 
   async function build(
     config: { hausViewerBaseUrl?: string | undefined } = { hausViewerBaseUrl: sourceBase },
@@ -98,6 +102,9 @@ describe('house viewer pass-through', () => {
     seen = [];
     foreignHits = 0;
     logLines = [];
+    sourceCacheControl = 'public, max-age=2678400';
+    sourceEtag = '"v1"';
+    sourceBody = 'export const x = 1;';
     foreign = createServer((_req, res) => {
       foreignHits += 1;
       res.end('foreign');
@@ -108,20 +115,20 @@ describe('house viewer pass-through', () => {
       seen.push({ method: req.method ?? '', url, headers: req.headers });
       res.setHeader('X-Frame-Options', 'SAMEORIGIN');
       res.setHeader('Set-Cookie', 'ha=1');
-      res.setHeader('Cache-Control', 'public, max-age=2678400');
-      res.setHeader('ETag', '"v1"');
+      if (sourceCacheControl !== undefined) res.setHeader('Cache-Control', sourceCacheControl);
+      res.setHeader('ETag', sourceEtag);
       const path = url.split('?')[0];
       if (path === '/local/haus/redirect') {
         res.writeHead(302, { Location: `http://127.0.0.1:${foreignPort}/evil` });
         res.end();
-      } else if (req.headers['if-none-match'] === '"v1"') {
+      } else if (req.headers['if-none-match'] === sourceEtag) {
         res.writeHead(304).end();
       } else if (path === '/local/haus/viewer.html') {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.end(req.method === 'HEAD' ? undefined : VIEWER_HTML);
       } else if (path === '/local/haus/viewer/x.js') {
         res.setHeader('Content-Type', 'text/javascript');
-        res.end('export const x = 1;');
+        res.end(sourceBody);
       } else if (path === '/local/haus/haus.glb') {
         res.setHeader('Content-Type', 'model/gltf-binary');
         res.setHeader('Accept-Ranges', 'bytes');
@@ -181,7 +188,7 @@ describe('house viewer pass-through', () => {
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['content-type']).toBe('model/gltf-binary');
-    expect(response.headers['cache-control']).toBe('private, max-age=2678400');
+    expect(response.headers['cache-control']).toBe('private, no-cache');
     expect(response.headers.etag).toBe('"v1"');
     expect(response.rawPayload.equals(BINARY)).toBe(true);
   });
@@ -226,6 +233,46 @@ describe('house viewer pass-through', () => {
       headers: { 'if-none-match': '"v1"' },
     });
     expect(conditional.statusCode).toBe(304);
+  });
+
+  it.each([['public, max-age=3600'], ['no-store'], [undefined]])(
+    'forces revalidation when the source sends Cache-Control %s',
+    async (value) => {
+      sourceCacheControl = value;
+      const base = keyBase(await viewerPath(await login()));
+      const ok = await app.inject({ method: 'GET', url: `${base}/viewer/x.js` });
+      const ranged = await app.inject({
+        method: 'GET',
+        url: `${base}/haus.glb`,
+        headers: { range: 'bytes=0-3' },
+      });
+      const notModified = await app.inject({
+        method: 'GET',
+        url: `${base}/viewer/x.js`,
+        headers: { 'if-none-match': '"v1"' },
+      });
+      const missing = await app.inject({ method: 'GET', url: `${base}/missing.glb` });
+      const all = [ok, ranged, notModified, missing];
+      expect(all.map((r) => r.statusCode)).toEqual([200, 206, 304, 404]);
+      for (const response of all) {
+        expect(response.headers['cache-control']).toBe('private, no-cache');
+      }
+      expect(ok.headers.etag).toBe('"v1"');
+      expect(notModified.body).toBe('');
+    },
+  );
+
+  it('serves the new content once the source changed its ETag', async () => {
+    const base = keyBase(await viewerPath(await login()));
+    const url = `${base}/viewer/x.js`;
+    sourceEtag = '"v2"';
+    sourceBody = 'export const x = 2;';
+    const response = await app.inject({ method: 'GET', url, headers: { 'if-none-match': '"v1"' } });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('export const x = 2;');
+    expect(response.headers.etag).toBe('"v2"');
+    const again = await app.inject({ method: 'GET', url, headers: { 'if-none-match': '"v2"' } });
+    expect(again.statusCode).toBe(304);
   });
 
   it.each([

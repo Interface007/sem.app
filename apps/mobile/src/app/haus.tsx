@@ -1,46 +1,41 @@
 import type { ViewerEntitiesMessage } from '@sem/contracts';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
 import { HausViewer } from '../components/HausViewer';
 import { currentServerUrl } from '../lib/apiFetch';
-import { fetchViewerInfo } from '../lib/haus';
+import { resolveViewerState, type ViewerState } from '../lib/haus';
 import { session } from '../lib/sessionClient';
 import { appOrigin, buildViewerUrl, viewerOrigin } from '../lib/viewerUrl';
 
-type State =
-  | { status: 'loading' }
-  | { status: 'available'; uri: string; origin: string }
-  | { status: 'not_configured' }
-  | { status: 'unreachable' };
+type State = { status: 'loading' } | ViewerState;
 
 export default function HausScreen() {
   const [state, setState] = useState<State>({ status: 'loading' });
   // Held for the upcoming readings; nothing is sent to the viewer yet.
   const [, setEntities] = useState<ViewerEntitiesMessage['entitaeten']>([]);
 
-  const load = useCallback(async () => {
+  // The loading state unmounts the WebView, so every load creates it anew.
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
     setState({ status: 'loading' });
-    // Anything unexpected ends as "unreachable"; the spinner must never stay.
-    try {
-      const info = await fetchViewerInfo(session.authFetch);
-      if (info.status !== 'available') {
-        setState({ status: info.status });
-        return;
-      }
-      const server = currentServerUrl() ?? '';
-      setState({
-        status: 'available',
-        uri: buildViewerUrl(server, info.path),
-        origin: viewerOrigin(server, appOrigin(globalThis)),
-      });
-    } catch {
-      setState({ status: 'unreachable' });
-    }
+    const server = currentServerUrl() ?? '';
+    const next = await resolveViewerState(session.authFetch, (path) => ({
+      uri: buildViewerUrl(server, path),
+      origin: viewerOrigin(server, appOrigin(globalThis)),
+    }));
+    if (isCurrent()) setState(next);
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // On every focus, so reopening the tile asks the server again.
+  useFocusEffect(
+    useCallback(() => {
+      let current = true;
+      void load(() => current);
+      return () => {
+        current = false;
+      };
+    }, [load]),
+  );
 
   const onEntities = useCallback((message: ViewerEntitiesMessage) => {
     setEntities(message.entitaeten);
