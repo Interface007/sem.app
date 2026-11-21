@@ -87,10 +87,6 @@ function version(headers: Headers): string {
   return createHash('sha256').update(source).digest('hex').slice(0, 12);
 }
 
-function privateCacheControl(value: string): string {
-  return value.replace(/\bpublic\b/gi, 'private');
-}
-
 export function registerHausRoutes(app: FastifyInstance, deps: HausDeps): void {
   const { baseUrl, entry, sessions } = deps;
 
@@ -228,10 +224,9 @@ export function registerHausRoutes(app: FastifyInstance, deps: HausDeps): void {
         if (name === 'content-length' && upstream.headers.has('content-encoding')) continue;
         void reply.header(name, value);
       }
-      const cacheControl = upstream.headers.get('cache-control');
-      if (cacheControl !== null)
-        void reply.header('Cache-Control', privateCacheControl(cacheControl));
+      // Always revalidate (`304` via ETag/Last-Modified), whatever the source says.
       void reply
+        .header('Cache-Control', 'private, no-cache')
         .header('Content-Security-Policy', "frame-ancestors 'self'")
         .header('Referrer-Policy', 'no-referrer')
         .header('X-Content-Type-Options', 'nosniff');

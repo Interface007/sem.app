@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchViewerInfo } from './haus';
+import { fetchViewerInfo, resolveViewerState } from './haus';
 import { createSessionClient } from './session';
 
 const json = (body: unknown, status = 200) =>
@@ -66,5 +66,39 @@ describe('fetchViewerInfo', () => {
     expect(await fetchViewerInfo(() => Promise.resolve(new Response('<html>')))).toEqual(
       unreachable,
     );
+  });
+});
+
+describe('resolveViewerState', () => {
+  const toState = (path: string) => ({ uri: `https://s${path}`, origin: 'https://s' });
+
+  it('asks the server again on every call and returns the fresh URL', async () => {
+    const paths = ['/api/haus/viewer/k/a/viewer.html?v=1', '/api/haus/viewer/k/a/viewer.html?v=2'];
+    const asked: string[] = [];
+    const fetcher = (p: string) => {
+      asked.push(p);
+      return json({ available: true, path: paths[asked.length - 1] });
+    };
+    const first = await resolveViewerState(fetcher, toState);
+    const second = await resolveViewerState(fetcher, toState);
+    expect(asked).toEqual(['/api/haus/viewer', '/api/haus/viewer']);
+    expect(first).toEqual({
+      status: 'available',
+      uri: 'https://s/api/haus/viewer/k/a/viewer.html?v=1',
+      origin: 'https://s',
+    });
+    expect(second).toMatchObject({ uri: 'https://s/api/haus/viewer/k/a/viewer.html?v=2' });
+  });
+
+  it('passes not_configured on and maps failures to unreachable', async () => {
+    expect(
+      await resolveViewerState(() => json({ available: false, reason: 'not_configured' }), toState),
+    ).toEqual({ status: 'not_configured' });
+    const broken = () => {
+      throw new Error('bad url');
+    };
+    expect(await resolveViewerState(() => json({ available: true, path: '/p' }), broken)).toEqual({
+      status: 'unreachable',
+    });
   });
 });

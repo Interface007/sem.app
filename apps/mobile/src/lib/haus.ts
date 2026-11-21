@@ -21,3 +21,26 @@ export async function fetchViewerInfo(
     return { status: 'unreachable' };
   }
 }
+
+export type ViewerState =
+  | { status: 'available'; uri: string; origin: string }
+  | { status: 'not_configured' }
+  | { status: 'unreachable' };
+
+/**
+ * Asks the server for the current viewer path and turns it into what the
+ * screen shows. Called on every focus, so the WebView never keeps an old URL.
+ * Anything unexpected ends as `unreachable`.
+ */
+export async function resolveViewerState(
+  fetcher: (path: string) => Promise<Response>,
+  toState: (path: string) => { uri: string; origin: string },
+): Promise<ViewerState> {
+  try {
+    const info = await fetchViewerInfo(fetcher);
+    if (info.status !== 'available') return { status: info.status };
+    return { status: 'available', ...toState(info.path) };
+  } catch {
+    return { status: 'unreachable' };
+  }
+}

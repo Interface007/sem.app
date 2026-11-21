@@ -150,6 +150,13 @@ auf Android und daran, dass der Tailscale-Name im WLAN nicht auflösbar ist.
 * Der Server reicht nur Dateien unterhalb von `HAUS_VIEWER_BASE_URL` durch,
   ohne `Authorization`/`Cookie`, ohne Weiterleitungen und als Stream.
   `X-Frame-Options` und `Set-Cookie` der Quelle entfallen.
+* Cache: Jede durchgereichte Antwort trägt `Cache-Control: private, no-cache`,
+  egal was die Quelle sendet. Die WebView fragt so bei jedem Laden mit
+  `If-None-Match`/`If-Modified-Since` nach; unveränderte Dateien kosten nur
+  ein `304`, geänderte Dateien (neuer `ETag`) kommen sofort neu. `ETag` und
+  `Last-Modified` der Quelle werden dafür weitergereicht. Die App fragt
+  `/api/haus/viewer` bei jedem Fokus der Kachel „Haus“ neu ab und erzeugt die
+  WebView neu; `?v=` deckt nur die Einstiegsdatei ab.
 * Der Viewer bleibt unverändert; three.js und Schriften lädt der Client weiter
   von unpkg bzw. Google Fonts.
 
