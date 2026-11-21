@@ -35,7 +35,10 @@ beforeAll(async () => {
       fileMetadata: { android: { bundle: BUNDLE, assets: [{ path: IMAGE, ext: 'png' }] } },
     }),
   );
-  await writeFile(path.join(dir, 'expoConfig.json'), JSON.stringify({ runtimeVersion: RUNTIME }));
+  await writeFile(
+    path.join(dir, 'expoConfig.json'),
+    JSON.stringify({ runtimeVersion: RUNTIME, version: '1.2.3', extra: { gitCommit: 'abc1234' } }),
+  );
   await writeFile(path.join(root, 'secret.txt'), 'outside');
   await symlink(path.join(root, 'secret.txt'), path.join(dir, 'link.txt'));
 
@@ -85,6 +88,9 @@ describe('GET /api/updates/manifest', () => {
 
     const manifest = UpdateManifest.parse(JSON.parse(json));
     expect(manifest.runtimeVersion).toBe(RUNTIME);
+    expect(manifest.extra).toEqual({
+      expoClient: { runtimeVersion: RUNTIME, version: '1.2.3', extra: { gitCommit: 'abc1234' } },
+    });
     const sha = (text: string): string =>
       createHash('sha256').update(text).digest().toString('base64url');
     expect(manifest.launchAsset.hash).toBe(sha('bundle-bytes'));
