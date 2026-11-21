@@ -22,7 +22,9 @@ import {
 import { session } from '../lib/sessionClient';
 
 type State =
-  { status: 'loading' } | { status: 'error' } | { status: 'ready'; locations: FamilyLocation[] };
+  | { status: 'loading' }
+  | { status: 'error'; reason: string }
+  | { status: 'ready'; locations: FamilyLocation[] };
 
 const styleUrl = mapStyleUrl(process.env.EXPO_PUBLIC_MAP_STYLE_URL);
 
@@ -46,7 +48,10 @@ export default function FamilieScreen() {
           setState({ status: 'ready', locations: result.locations });
         } else {
           // A failed refresh keeps the last known positions.
-          setState((previous) => (previous.status === 'ready' ? previous : { status: 'error' }));
+          console.warn(`Loading locations failed: ${result.error}`);
+          setState((previous) =>
+            previous.status === 'ready' ? previous : { status: 'error', reason: result.error },
+          );
         }
       };
       const start = () => {
@@ -87,6 +92,9 @@ export default function FamilieScreen() {
     return (
       <View style={styles.center} testID="family-error">
         <Text>Standorte konnten nicht geladen werden.</Text>
+        <Text style={styles.reason} testID="family-error-reason">
+          {state.reason}
+        </Text>
         <Button title="Erneut versuchen" onPress={() => reload.current()} />
       </View>
     );
@@ -146,6 +154,7 @@ const styles = StyleSheet.create({
   map: { flex: 3, minHeight: 200 },
   dom: { width: '100%', height: '100%' },
   list: { flex: 2 },
+  reason: { color: '#555', fontSize: 12, textAlign: 'center' },
   empty: { padding: 16, textAlign: 'center' },
   item: { paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
   pressed: { opacity: 0.7 },
