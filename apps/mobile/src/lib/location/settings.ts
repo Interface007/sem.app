@@ -11,12 +11,16 @@ export interface SharingSettings {
   /** Epoch milliseconds of the last accepted report, `null` if none yet. */
   getLastSentAt(): Promise<number | null>;
   setLastSentAt(at: number): Promise<void>;
+  /** True if sharing was switched off because restarting it failed; cleared by the next enable. */
+  wasStoppedByError(): Promise<boolean>;
+  setStoppedByError(stopped: boolean): Promise<void>;
   /** Random id of this installation; created once, then stable. */
   getDeviceId(): Promise<DeviceId>;
 }
 
 const ENABLED_KEY = 'sem_location_sharing';
 const LAST_SENT_KEY = 'sem_location_last_sent';
+const STOPPED_BY_ERROR_KEY = 'sem_location_stopped_by_error';
 const DEVICE_ID_KEY = 'sem_device_id';
 
 export function createSharingSettings(
@@ -33,6 +37,10 @@ export function createSharingSettings(
       return Number.isFinite(value) && value > 0 ? value : null;
     },
     setLastSentAt: (at) => store.set(LAST_SENT_KEY, String(at)),
+    async wasStoppedByError() {
+      return (await store.get(STOPPED_BY_ERROR_KEY)) === 'true';
+    },
+    setStoppedByError: (stopped) => store.set(STOPPED_BY_ERROR_KEY, stopped ? 'true' : 'false'),
     async getDeviceId() {
       const stored = DeviceId.safeParse(await store.get(DEVICE_ID_KEY));
       if (stored.success) return stored.data;

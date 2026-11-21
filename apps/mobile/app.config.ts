@@ -2,6 +2,7 @@
 import 'tsx/cjs';
 import { execSync } from 'node:child_process';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import { withLocationService } from './plugins/location-service';
 import { withReleaseSigning } from './plugins/release-signing';
 import { parseServerUrls } from './src/lib/serverUrls';
 
@@ -35,7 +36,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   // expo-updates knows only one address: the first of the list wins.
   const serverUrl = parseServerUrls(process.env.EXPO_PUBLIC_SERVER_URL ?? '')[0] ?? '';
 
-  return withReleaseSigning({
+  const signed = withReleaseSigning({
     ...config,
     name: config.name ?? 'sem',
     slug: config.slug ?? 'sem-app',
@@ -53,4 +54,5 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     extra: { ...config.extra, gitCommit: process.env.GIT_COMMIT || gitCommit() },
   });
+  return withLocationService(signed);
 };

@@ -37,6 +37,18 @@ appId: cloud.matzen.sem
       id: location-status
       text: "Zuletzt gesendet: [0-9]{2}:[0-9]{2}:[0-9]{2}"
     timeout: 30000
+# Restart without clearing state (#46): the app must open and keep sending.
+- stopApp
+- launchApp
+- assertVisible: Start
+- tapOn: Einstellungen
+- assertVisible:
+    id: location-sharing
+- extendedWaitUntil:
+    visible:
+      id: location-status
+      text: "Zuletzt gesendet: [0-9]{2}:[0-9]{2}:[0-9]{2}"
+    timeout: 30000
 # Clean up: switch sharing off again.
 - tapOn:
     id: location-sharing

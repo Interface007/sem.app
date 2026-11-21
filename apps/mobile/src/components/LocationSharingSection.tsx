@@ -32,10 +32,12 @@ export function LocationSharingSection() {
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState<DeniedPermission | undefined>();
   const [lastSentAt, setLastSentAt] = useState<number | null>(null);
+  const [stoppedByError, setStoppedByError] = useState(false);
 
   const refresh = useCallback(async () => {
     setEnabled(await sharingSettings.isEnabled());
     setLastSentAt(await sharingSettings.getLastSentAt());
+    setStoppedByError(await sharingSettings.wasStoppedByError());
   }, []);
 
   useEffect(() => {
@@ -75,6 +77,11 @@ export function LocationSharingSection() {
       {denied !== undefined && (
         <Text testID="location-permission-hint" style={styles.text}>
           {DENIED_TEXTS[denied]}
+        </Text>
+      )}
+      {stoppedByError && !enabled && (
+        <Text testID="location-error-hint" style={styles.text}>
+          Standort teilen wurde wegen eines Fehlers beendet – bitte erneut einschalten.
         </Text>
       )}
       <Text testID="location-status">

@@ -1,6 +1,14 @@
 import { Link, Tabs } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Button, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  AppState,
+  Button,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { BuildFooter } from '../components/BuildFooter';
 import { AuthProvider, useAuth } from '../lib/AuthProvider';
 import { locationSharing } from '../lib/location/adapter';
@@ -12,7 +20,14 @@ function Navigation() {
   const signedIn = state.status === 'signedIn';
 
   useEffect(() => {
-    if (Platform.OS === 'android') void locationSharing.resume(signedIn);
+    if (Platform.OS !== 'android') return;
+    // Android 14+ only allows starting the foreground service while the app is in the foreground.
+    const resume = () => void locationSharing.resume(signedIn);
+    if (AppState.currentState === 'active') resume();
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') resume();
+    });
+    return () => subscription.remove();
   }, [signedIn]);
 
   if (state.status === 'checking') {
