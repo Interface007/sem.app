@@ -23,12 +23,17 @@ services:
       # Der Container muss die Adresse erreichen; im Zweifel die LAN-Adresse nehmen:
       # HAUS_VIEWER_BASE_URL: http://192.168.1.20:8123/local/haus/
       # HAUS_VIEWER_ENTRY: viewer.html
+      # Over-the-Air-Updates der Android-App (siehe docs/updates.md):
+      # UPDATES_PRIVATE_KEY_PATH: /keys/update-signing.pem
+      # UPDATES_BASE_URL: https://sem.matzen.familyds.net
       # Nur für Tests/Entwicklung, nicht im Betrieb:
       # NAS_GATEWAY: local
       # LOCAL_USERS: anna:passwort,ben:passwort2
     volumes:
       # Der Ordner muss für UID 1000 (Benutzer „node“) beschreibbar sein.
       - ./data:/data
+      # Signaturschlüssel für Updates, nur lesend (siehe docs/updates.md):
+      # - ./keys/update-signing.pem:/keys/update-signing.pem:ro
     # Härtung: Außer /data braucht der Server keine Schreibrechte.
     read_only: true
     tmpfs:

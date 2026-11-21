@@ -7,5 +7,5 @@ const conditions = ['@sem/source'];
 export default defineConfig({
   resolve: { conditions },
   ssr: { resolve: { conditions } },
-  test: { include: ['src/**/*.test.ts', 'plugins/**/*.test.ts'] },
+  test: { include: ['src/**/*.test.ts', 'plugins/**/*.test.ts', 'scripts/**/*.test.ts'] },
 });

@@ -128,7 +128,8 @@ async function buildManifest(dir: string, base: string): Promise<UpdateManifest 
     launchAsset,
     assets: described.filter((a): a is UpdateAsset => a !== undefined),
     metadata: {},
-    extra: {},
+    // Without it, Constants.expoConfig is null while an update runs.
+    extra: { expoClient: expoConfig.data },
   };
 }
 

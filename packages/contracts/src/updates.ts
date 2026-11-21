@@ -48,8 +48,13 @@ export const ExportMetadata = z.object({
 
 export type ExportMetadata = z.infer<typeof ExportMetadata>;
 
-/** Subset of `expoConfig.json` written by `expo export` that the server reads. */
-export const ExportExpoConfig = z.object({
+/**
+ * `expoConfig.json` next to the export (apps/mobile/scripts/export-update.ts):
+ * the public app config with the resolved runtime version. The server needs
+ * `runtimeVersion` and passes the whole object to the app as
+ * `extra.expoClient` (read there as `Constants.expoConfig`).
+ */
+export const ExportExpoConfig = z.looseObject({
   runtimeVersion: z.string().min(1),
 });
 

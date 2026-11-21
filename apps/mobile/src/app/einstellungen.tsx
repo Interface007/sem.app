@@ -36,6 +36,9 @@ export default function EinstellungenScreen() {
           updateId: Updates.updateId,
         })}
       </Text>
+      <Text testID="runtime-version" selectable>
+        Runtime: {Updates.runtimeVersion ?? 'unbekannt'}
+      </Text>
       <Button title="Nach Updates suchen" onPress={check} disabled={busy || !Updates.isEnabled} />
       {message !== '' && <Text testID="update-message">{message}</Text>}
       {Platform.OS === 'android' && <LocationSharingSection />}
