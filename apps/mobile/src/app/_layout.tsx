@@ -14,6 +14,8 @@ import { AuthProvider, useAuth } from '../lib/AuthProvider';
 import { locationSharing } from '../lib/location/adapter';
 // Registers the background task; it must exist even when Android starts the app without UI.
 import '../lib/location/task';
+// Same for the task that receives boost messages from FCM.
+import '../lib/location/boostTask';
 
 function Navigation() {
   const { state, retry } = useAuth();

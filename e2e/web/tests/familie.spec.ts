@@ -19,13 +19,14 @@ function location(user: string, latitude: number, longitude: number, ageSeconds 
 
 interface LocationsMock {
   requests: number;
+  boosts: { deviceId: string; boostUntil: string }[];
   /** Answer of the next requests; a number is an HTTP error status. */
   answer: () => unknown;
 }
 
 /** Mocks session, locations and the map style: no foreign service is contacted. */
 async function mockFamily(page: Page, answer: LocationsMock['answer']): Promise<LocationsMock> {
-  const mock: LocationsMock = { requests: 0, answer };
+  const mock: LocationsMock = { requests: 0, boosts: [], answer };
   await mockSession(page);
   // Any other external request fails loudly instead of leaving the machine.
   await page.route(/^https:\/\/(?!tiles\.openfreemap\.org\/styles\/liberty)/, (route) =>
@@ -40,6 +41,19 @@ async function mockFamily(page: Page, answer: LocationsMock['answer']): Promise<
     return typeof body === 'number'
       ? route.fulfill({ status: body })
       : fulfillJson(route, 200, body);
+  });
+  await page.route('**/api/locations/boosts', (route) =>
+    fulfillJson(route, 200, { boosts: mock.boosts }),
+  );
+  await page.route('**/api/locations/*/boost', (route) => {
+    const deviceId = new URL(route.request().url()).pathname.split('/')[3] ?? '';
+    if (route.request().method() === 'DELETE') {
+      mock.boosts = mock.boosts.filter((b) => b.deviceId !== deviceId);
+      return route.fulfill({ status: 204 });
+    }
+    const boostUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    mock.boosts = [...mock.boosts, { deviceId, boostUntil }];
+    return fulfillJson(route, 200, { boostUntil, pushed: true });
   });
   return mock;
 }
@@ -142,4 +156,19 @@ test('leaving the screen stops the requests', async ({ page }) => {
 
   await page.clock.runFor(35_000);
   expect(mock.requests).toBe(requests);
+});
+
+test('a device can be followed live for 10 minutes and the boost ended again', async ({ page }) => {
+  await mockFamily(page, () => ({ locations: [location('anna', 52.52, 13.4)] }));
+  await page.goto('/familie');
+
+  const toggle = page.getByTestId('family-boost-toggle-device-anna');
+  await expect(toggle).toContainText('10 min live verfolgen');
+  await toggle.click();
+  await expect(page.getByTestId('family-boost-device-anna')).toContainText('Live bis');
+  await expect(page.getByTestId('family-list')).toContainText('Das Gerät wurde benachrichtigt.');
+
+  await toggle.click();
+  await expect(page.getByTestId('family-boost-device-anna')).toHaveCount(0);
+  await expect(page.getByTestId('family-list')).toContainText('Live-Verfolgung beendet.');
 });

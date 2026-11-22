@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DeviceId, FamilyLocation, LocationList, LocationReport } from './index.js';
+import {
+  BoostPushData,
+  DeviceId,
+  FamilyLocation,
+  LocationBoostList,
+  LocationBoostResult,
+  LocationList,
+  LocationReport,
+  LocationReportResult,
+} from './index.js';
 
 const report = {
   deviceId: 'device-1234',
@@ -15,6 +24,8 @@ describe('LocationReport', () => {
     ['with accuracy', report],
     ['with null accuracy', { ...report, accuracy: null }],
     ['at the coordinate limits', { ...report, latitude: -90, longitude: 180 }],
+    ['with a push token', { ...report, pushToken: 'fcm:token-1' }],
+    ['with a null push token', { ...report, pushToken: null }],
   ])('accepts %s', (_name, value) => {
     expect(LocationReport.parse(value)).toEqual(value);
   });
@@ -32,6 +43,8 @@ describe('LocationReport', () => {
     ['missing accuracy', { ...report, accuracy: undefined }],
     ['invalid recordedAt', { ...report, recordedAt: 'gestern' }],
     ['additional field user', { ...report, user: 'anna' }],
+    ['empty push token', { ...report, pushToken: '' }],
+    ['push token over 512 characters', { ...report, pushToken: 'x'.repeat(513) }],
   ])('rejects %s', (_name, value) => {
     expect(LocationReport.safeParse(value).success).toBe(false);
   });
@@ -59,5 +72,36 @@ describe('FamilyLocation and LocationList', () => {
   it('requires receivedAt and rejects unknown fields', () => {
     expect(FamilyLocation.safeParse({ ...report, user: 'anna' }).success).toBe(false);
     expect(FamilyLocation.safeParse({ ...location, extra: 1 }).success).toBe(false);
+  });
+});
+
+describe('boost contracts', () => {
+  const until = '2026-01-01T10:10:00.000Z';
+
+  it('accepts a report result with and without boost', () => {
+    expect(LocationReportResult.parse({ boostUntil: until })).toEqual({ boostUntil: until });
+    expect(LocationReportResult.parse({ boostUntil: null })).toEqual({ boostUntil: null });
+    expect(LocationReportResult.safeParse({}).success).toBe(false);
+  });
+
+  it('accepts a boost list and rejects invalid device ids', () => {
+    const boost = { deviceId: 'device-1234', boostUntil: until };
+    expect(LocationBoostList.parse({ boosts: [boost] })).toEqual({ boosts: [boost] });
+    expect(LocationBoostList.safeParse({ boosts: [{ ...boost, deviceId: 'a b' }] }).success).toBe(
+      false,
+    );
+  });
+
+  it('requires pushed in a boost result', () => {
+    expect(LocationBoostResult.safeParse({ boostUntil: until }).success).toBe(false);
+    expect(LocationBoostResult.parse({ boostUntil: until, pushed: true }).pushed).toBe(true);
+  });
+
+  it('parses the push payload and ignores other message types', () => {
+    expect(BoostPushData.parse({ type: 'location-boost', boostUntil: until, extra: '1' })).toEqual({
+      type: 'location-boost',
+      boostUntil: until,
+    });
+    expect(BoostPushData.safeParse({ type: 'other', boostUntil: until }).success).toBe(false);
   });
 });

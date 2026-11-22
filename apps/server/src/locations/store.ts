@@ -8,6 +8,8 @@ export interface StoredLocation {
   accuracy: number | null;
   recordedAt: number;
   receivedAt: number;
+  /** FCM token of the device; never sent to other clients. */
+  pushToken: string | null;
 }
 
 export interface LocationReading {
@@ -16,6 +18,8 @@ export interface LocationReading {
   longitude: number;
   accuracy: number | null;
   recordedAt: number;
+  /** `undefined` keeps the stored token (report from an app that does not send one). */
+  pushToken?: string | null;
 }
 
 /** Where the latest positions survive a restart. */
@@ -35,6 +39,10 @@ export interface LocationStore {
   /** All positions that are not older than the retention limit, sorted by user, then device name. */
   list(): StoredLocation[];
   has(user: string, deviceId: string): boolean;
+  /** All current entries with this device id (normally one). */
+  findByDevice(deviceId: string): StoredLocation[];
+  /** Forgets the token, e.g. after FCM reported it as no longer registered. */
+  clearPushToken(user: string, deviceId: string, token: string): void;
   /** Whether a user other than `user` has a position for this device id. */
   hasOtherUser(user: string, deviceId: string): boolean;
   remove(user: string, deviceId: string): void;
@@ -88,7 +96,14 @@ export class MemoryLocationStore implements LocationStore {
     const id = key(user, deviceId);
     const existing = this.entries.get(id);
     if (existing !== undefined && reading.recordedAt < existing.recordedAt) return false;
-    this.entries.set(id, { user, deviceId, ...reading, receivedAt: this.options.now() });
+    const { pushToken, ...rest } = reading;
+    this.entries.set(id, {
+      user,
+      deviceId,
+      ...rest,
+      receivedAt: this.options.now(),
+      pushToken: pushToken === undefined ? (existing?.pushToken ?? null) : pushToken,
+    });
     this.dirty = true;
     return true;
   }
@@ -103,6 +118,18 @@ export class MemoryLocationStore implements LocationStore {
   has(user: string, deviceId: string): boolean {
     this.purge();
     return this.entries.has(key(user, deviceId));
+  }
+
+  findByDevice(deviceId: string): StoredLocation[] {
+    this.purge();
+    return [...this.entries.values()].filter((entry) => entry.deviceId === deviceId);
+  }
+
+  clearPushToken(user: string, deviceId: string, token: string): void {
+    const entry = this.entries.get(key(user, deviceId));
+    if (entry === undefined || entry.pushToken !== token) return;
+    entry.pushToken = null;
+    this.dirty = true;
   }
 
   hasOtherUser(user: string, deviceId: string): boolean {

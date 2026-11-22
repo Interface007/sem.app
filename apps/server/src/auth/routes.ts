@@ -39,6 +39,7 @@ const MESSAGES: Record<ApiErrorCode, string> = {
   rate_limited: 'Zu viele Fehlversuche. Bitte später erneut versuchen.',
   unauthenticated: 'Bitte anmelden.',
   forbidden: 'Dieser Eintrag gehört einem anderen Benutzer.',
+  not_found: 'Der Eintrag wurde nicht gefunden.',
 };
 
 const FAILURES: Record<NasLoginFailure, { status: number; code: ApiErrorCode }> = {

@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { apiFetch } from '../apiFetch';
@@ -55,6 +56,12 @@ export const locationSharing = createLocationSharing({
   api: expoLocationApi,
   settings: sharingSettings,
   authFetch: session.authFetch,
+  async getPushToken() {
+    const token = await Notifications.getDevicePushTokenAsync();
+    if (typeof token.data !== 'string') throw new Error('unexpected push token');
+    return token.data;
+  },
+  now: () => Date.now(),
 });
 
 const model = (Platform.constants as { Model?: string } | undefined)?.Model;
@@ -65,5 +72,6 @@ export const taskDeps: TaskDeps = {
   settings: sharingSettings,
   now: () => Date.now(),
   stopUpdates: expoLocationApi.stopUpdates,
+  applyBoost: (boostUntil) => locationSharing.applyBoost(boostUntil),
   deviceName: (model || 'Android').slice(0, 60),
 };

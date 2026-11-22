@@ -63,6 +63,8 @@ const EnvSchema = z
     LOCATION_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(8760).default(24),
     /** Minimum seconds between writes of the locations to the database. */
     LOCATION_FLUSH_SECONDS: z.coerce.number().int().min(1).max(86400).default(60),
+    /** Service account JSON of the Firebase project; boosts are not pushed if unset. */
+    FCM_SERVICE_ACCOUNT_FILE: z.string().min(1).optional(),
     /** Honour `X-Forwarded-*` (set behind the DSM reverse proxy). */
     TRUST_PROXY: z
       .enum(['true', 'false'])
@@ -106,6 +108,7 @@ export interface Config {
   sessionTtlDays: number;
   locationMaxAgeHours: number;
   locationFlushSeconds: number;
+  fcmServiceAccountFile: string | undefined;
   trustProxy: boolean;
 }
 
@@ -139,6 +142,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionTtlDays: e.SESSION_TTL_DAYS,
     locationMaxAgeHours: e.LOCATION_MAX_AGE_HOURS,
     locationFlushSeconds: e.LOCATION_FLUSH_SECONDS,
+    fcmServiceAccountFile: e.FCM_SERVICE_ACCOUNT_FILE,
     trustProxy: e.TRUST_PROXY,
   };
 }

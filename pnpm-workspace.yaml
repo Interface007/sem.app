@@ -33,3 +33,6 @@ overrides:
   '@react-native/metro-config': 0.86.3
   react-native-reanimated: 4.5.1
   react-native-worklets: 0.10.1
+
+patchedDependencies:
+  expo-location@57.0.23: patches/expo-location@57.0.23.patch

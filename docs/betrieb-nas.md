@@ -119,6 +119,49 @@ Passwort) und überlebt damit Neustarts des Containers.
 * Nach 5 fehlgeschlagenen Anmeldungen eines Benutzernamens innerhalb von
   10 Minuten antwortet der Server mit „429“, ohne das DSM zu fragen.
 
+## Live-Verfolgung (Firebase Cloud Messaging)
+
+Auf der Familienkarte kann jedes angemeldete Familienmitglied ein Gerät für
+10 Minuten auf „alle 10 Sekunden“ stellen, unabhängig vom dort gewählten
+Intervall. Danach gilt wieder das eigene Intervall des Geräts.
+
+Damit das sofort ankommt, schickt der Server über Firebase Cloud Messaging
+(FCM) eine kurze Datennachricht an das Gerät. Sie enthält nur das Ende der
+Live-Verfolgung, keinen Standort. FCM ist kostenlos (Firebase-Tarif „Spark“,
+ohne Zahlungsmittel). Google sieht dabei, wann welches Gerät eine Nachricht
+bekommt. Ohne FCM funktioniert die Live-Verfolgung trotzdem, erreicht das
+Gerät aber erst mit seinem nächsten regulären Bericht, also bei „jede
+Stunde“ bis zu eine Stunde später.
+
+Einmalig einrichten:
+
+1. In der [Firebase-Konsole](https://console.firebase.google.com/) ein
+   Projekt anlegen. Google Analytics wird nicht gebraucht.
+2. Darin eine Android-App mit dem Paketnamen `cloud.matzen.sem` hinzufügen
+   und `google-services.json` herunterladen. Die Datei enthält keine
+   Geheimnisse, gehört aber nicht ins Repository. Beim Bau der APK gibt
+   `GOOGLE_SERVICES_FILE` ihren Pfad an (siehe `apps/mobile/app.config.ts`).
+   Ohne sie bekommt die App kein FCM-Token.
+3. Unter *Projekteinstellungen → Dienstkonten* einen neuen privaten
+   Schlüssel erzeugen. Das ist ein **Geheimnis**: als
+   `docker/sem-server/keys/fcm-service-account.json` auf der NAS ablegen und
+   nur lesend einbinden.
+4. In `compose.yaml` `FCM_SERVICE_ACCOUNT_FILE` und das Volume dazu
+   einkommentieren und das Projekt neu starten.
+
+| Variable | Bedeutung |
+|---|---|
+| `FCM_SERVICE_ACCOUNT_FILE` | Pfad des Dienstkonto-Schlüssels im Container; ohne Angabe werden keine Push-Nachrichten gesendet |
+
+* Der Server braucht dafür nur ausgehendes HTTPS zu `oauth2.googleapis.com`
+  und `fcm.googleapis.com`.
+* Eine neue APK ist nötig (neue native Bestandteile: `expo-notifications`
+  und ein Patch an `expo-location`, siehe `patches/`). Ein Over-the-Air-Update
+  reicht nicht.
+* Das verfolgte Gerät zeigt eine Benachrichtigung „Live-Verfolgung aktiv“.
+* Meldet FCM ein Token als ungültig (App neu installiert), vergisst der
+  Server es. Das Gerät schickt beim nächsten Start der App ein neues.
+
 ## Haus-Viewer aus Home Assistant
 
 `sem-server` kann den Haus-Viewer, der in Home Assistant unter `/local/haus/`

@@ -26,6 +26,8 @@ services:
       # Over-the-Air-Updates der Android-App (siehe docs/updates.md):
       # UPDATES_PRIVATE_KEY_PATH: /keys/update-signing.pem
       # UPDATES_BASE_URL: https://sem.matzen.familyds.net
+      # Live-Verfolgung per Firebase Cloud Messaging (siehe docs/betrieb-nas.md):
+      # FCM_SERVICE_ACCOUNT_FILE: /keys/fcm-service-account.json
       # Nur für Tests/Entwicklung, nicht im Betrieb:
       # NAS_GATEWAY: local
       # LOCAL_USERS: anna:passwort,ben:passwort2
@@ -34,6 +36,8 @@ services:
       - ./data:/data
       # Signaturschlüssel für Updates, nur lesend (siehe docs/updates.md):
       # - ./keys/update-signing.pem:/keys/update-signing.pem:ro
+      # Dienstkonto-Schlüssel für FCM, nur lesend (siehe docs/betrieb-nas.md):
+      # - ./keys/fcm-service-account.json:/keys/fcm-service-account.json:ro
     # Härtung: Außer /data braucht der Server keine Schreibrechte.
     read_only: true
     tmpfs:

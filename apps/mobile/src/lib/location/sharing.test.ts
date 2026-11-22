@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LOCATION_INTERVALS_MS } from './constants';
 import { logoutStoppingSharing } from './logout';
 import { createSharingSettings, randomUuid } from './settings';
-import { createLocationSharing, type LocationApi } from './sharing';
+import { createLocationSharing, effectiveInterval, formatClock, type LocationApi } from './sharing';
 
 function setup(
   grants: Partial<Record<'foreground' | 'notifications' | 'background', boolean>> = {},
@@ -31,8 +31,18 @@ function setup(
     calls.push(`${init?.method ?? 'GET'} ${path}`);
     return new Response(null, { status: 204 });
   });
+  const clock = { now: Date.UTC(2026, 0, 1, 12) };
+  const getPushToken = vi.fn(async () => 'fcm-token');
   return {
-    sharing: createLocationSharing({ api, settings, authFetch }),
+    sharing: createLocationSharing({
+      api,
+      settings,
+      authFetch,
+      getPushToken,
+      now: () => clock.now,
+    }),
+    clock,
+    getPushToken,
     api,
     settings,
     authFetch,
@@ -271,5 +281,120 @@ describe('logout', () => {
     const logout = vi.fn(async () => void calls.push('clear token'));
     await logoutStoppingSharing(sharing, logout);
     expect(calls).toEqual(['clear token']);
+  });
+});
+
+describe('boost', () => {
+  const MINUTE = 60_000;
+
+  it('prefers the boost interval only while the boost lasts', () => {
+    expect(effectiveInterval(3_600_000, null, 1000)).toBe(3_600_000);
+    expect(effectiveInterval(3_600_000, 2000, 1000)).toBe(10_000);
+    expect(effectiveInterval(3_600_000, 1000, 1000)).toBe(3_600_000);
+  });
+
+  it('formats the clock time with two digits', () => {
+    expect(formatClock(new Date(2026, 0, 1, 9, 5).getTime())).toBe('09:05');
+  });
+
+  it('re-registers the running updates with 10 s and a boost notice, without stopping', async () => {
+    const { sharing, api, settings, clock } = setup();
+    await settings.setInterval(3_600_000);
+    await sharing.enable();
+    vi.mocked(api.startUpdates).mockClear();
+
+    const until = clock.now + 10 * MINUTE;
+    await sharing.applyBoost(until);
+    expect(api.stopUpdates).not.toHaveBeenCalled();
+    expect(api.startUpdates).toHaveBeenCalledTimes(1);
+    const options = vi.mocked(api.startUpdates).mock.calls[0]?.[0];
+    expect(options?.timeInterval).toBe(10_000);
+    expect(options?.foregroundService.notificationBody).toBe(
+      `Live-Verfolgung bis ${formatClock(until)}. Der Standort wird alle 10 Sekunden an den Familien-Server gesendet.`,
+    );
+    expect(await settings.getActiveInterval()).toBe(10_000);
+    expect(await settings.getBoostUntil()).toBe(until);
+  });
+
+  it('does nothing while the effective interval stays the same', async () => {
+    const { sharing, api, settings, clock } = setup();
+    await settings.setInterval(3_600_000);
+    await sharing.enable();
+    await sharing.applyBoost(clock.now + 10 * MINUTE);
+    vi.mocked(api.startUpdates).mockClear();
+    await sharing.applyBoost(clock.now + 10 * MINUTE);
+    await sharing.applyBoost(clock.now + 5 * MINUTE);
+    expect(api.startUpdates).not.toHaveBeenCalled();
+  });
+
+  it('returns to the selected interval when the boost ends or expires', async () => {
+    const { sharing, api, settings, clock } = setup();
+    await settings.setInterval(600_000);
+    await sharing.enable();
+    await sharing.applyBoost(clock.now + 10 * MINUTE);
+    vi.mocked(api.startUpdates).mockClear();
+
+    clock.now += 10 * MINUTE;
+    await sharing.applyBoost(await settings.getBoostUntil());
+    const options = vi.mocked(api.startUpdates).mock.calls[0]?.[0];
+    expect(options?.timeInterval).toBe(600_000);
+    expect(options?.foregroundService.notificationBody).toBe(
+      'Der Standort wird alle 10 Minuten an den Familien-Server gesendet.',
+    );
+    expect(await settings.getActiveInterval()).toBe(600_000);
+  });
+
+  it('only remembers the boost while sharing is off', async () => {
+    const { sharing, api, settings, clock } = setup();
+    await sharing.applyBoost(clock.now + MINUTE);
+    expect(api.startUpdates).not.toHaveBeenCalled();
+    expect(await settings.getBoostUntil()).toBe(clock.now + MINUTE);
+  });
+
+  it('assumes the selected interval for updates started before boosts existed', async () => {
+    const { sharing, api, settings } = setup();
+    await settings.setEnabled(true);
+    await settings.setInterval(600_000);
+    await sharing.applyBoost(null);
+    expect(api.startUpdates).not.toHaveBeenCalled();
+  });
+
+  it('keeps the boost when the user picks another interval', async () => {
+    const { sharing, api, settings, clock } = setup();
+    await sharing.enable();
+    await sharing.applyBoost(clock.now + MINUTE);
+    vi.mocked(api.startUpdates).mockClear();
+    await sharing.setInterval(3_600_000);
+    expect(vi.mocked(api.startUpdates).mock.calls[0]?.[0].timeInterval).toBe(10_000);
+    expect(await settings.getInterval()).toBe(3_600_000);
+  });
+
+  it('ends an expired boost on resume while the updates run', async () => {
+    const { sharing, api, settings, clock } = setup();
+    await settings.setInterval(600_000);
+    await sharing.enable();
+    await sharing.applyBoost(clock.now + MINUTE);
+    vi.mocked(api.startUpdates).mockClear();
+    vi.mocked(api.hasStarted).mockResolvedValue(true);
+    clock.now += 2 * MINUTE;
+    await sharing.resume(true);
+    expect(vi.mocked(api.startUpdates).mock.calls[0]?.[0].timeInterval).toBe(600_000);
+  });
+
+  it('stores the push token on enable and resume, and null when there is none', async () => {
+    const { sharing, settings, getPushToken } = setup();
+    await sharing.enable();
+    expect(await settings.getPushToken()).toBe('fcm-token');
+
+    await settings.setEnabled(true);
+    getPushToken.mockRejectedValue(new Error('no Firebase'));
+    await sharing.resume(true);
+    expect(await settings.getPushToken()).toBeNull();
+  });
+
+  it('enables even without a push token', async () => {
+    const { sharing, getPushToken } = setup();
+    getPushToken.mockRejectedValue(new Error('no Firebase'));
+    expect(await sharing.enable()).toEqual({ ok: true });
   });
 });

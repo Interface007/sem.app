@@ -41,7 +41,7 @@ export interface SessionStore {
   close(): void;
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 interface SessionRow {
   id: string;
@@ -100,6 +100,9 @@ export class SqliteSessionStore implements SessionStore {
           PRIMARY KEY (username, device_id)
         );
       `);
+    }
+    if (row.user_version < 4) {
+      this.db.exec('ALTER TABLE locations ADD COLUMN push_token TEXT;');
     }
     this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   }

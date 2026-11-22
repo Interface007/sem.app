@@ -26,6 +26,10 @@ function gitCommit(): string {
  *   APP_VERSION         version name, e.g. 0.1.0 (CI: from the tag)
  *   ANDROID_VERSION_CODE  must grow with every release, otherwise
  *                         `adb install -r` refuses the update
+ *   GOOGLE_SERVICES_FILE  path of google-services.json from the Firebase
+ *                         project; without it the app gets no FCM token and
+ *                         boosts reach it only with its next report
+ *                         (docs/betrieb-nas.md)
  */
 export default ({ config }: ConfigContext): ExpoConfig => {
   const versionCode = Number(process.env.ANDROID_VERSION_CODE ?? '1');
@@ -41,7 +45,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: config.name ?? 'sem',
     slug: config.slug ?? 'sem-app',
     version: process.env.APP_VERSION ?? config.version ?? '0.0.0',
-    android: { ...config.android, versionCode },
+    android: {
+      ...config.android,
+      versionCode,
+      ...(process.env.GOOGLE_SERVICES_FILE && {
+        googleServicesFile: process.env.GOOGLE_SERVICES_FILE,
+      }),
+    },
     runtimeVersion: { policy: 'fingerprint' },
     updates: {
       // Without a server URL (web/dev builds) there is nothing to ask.

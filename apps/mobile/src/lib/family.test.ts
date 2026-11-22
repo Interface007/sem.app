@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   addMapError,
   boundingBox,
+  activeBoost,
   DEFAULT_MAP_STYLE_URL,
   describeMapError,
+  endBoost,
+  fetchBoosts,
   MAX_MAP_ERRORS,
   fetchLocations,
   formatAccuracy,
@@ -12,6 +15,7 @@ import {
   isStale,
   mapStyleUrl,
   sortLocations,
+  startBoost,
 } from './family';
 
 const now = Date.parse('2030-01-01T12:00:00.000Z');
@@ -193,5 +197,58 @@ describe('addMapError', () => {
     let list: string[] = [];
     for (const message of ['1', '2', '3', '4', '5']) list = addMapError(list, message);
     expect(list).toEqual(['3', '4', '5']);
+  });
+});
+
+describe('boost API', () => {
+  const until = '2030-01-01T12:10:00.000Z';
+  const respond = (status: number, body?: unknown) =>
+    vi.fn(
+      async (_path: string, _init?: RequestInit) =>
+        new Response(body === undefined ? null : JSON.stringify(body), { status }),
+    );
+
+  it('maps the active boosts by device id', async () => {
+    const fetcher = respond(200, { boosts: [{ deviceId: 'device-1234', boostUntil: until }] });
+    const boosts = await fetchBoosts(fetcher);
+    expect(fetcher).toHaveBeenCalledWith('/api/locations/boosts');
+    expect(boosts.get('device-1234')).toBe(Date.parse(until));
+  });
+
+  it('treats any boost list failure as no boosts', async () => {
+    expect((await fetchBoosts(respond(404, {}))).size).toBe(0);
+    expect((await fetchBoosts(respond(200, { boosts: [{}] }))).size).toBe(0);
+    const failing = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    expect((await fetchBoosts(failing)).size).toBe(0);
+  });
+
+  it('starts a boost with PUT and reports whether the device was pushed', async () => {
+    const fetcher = respond(200, { boostUntil: until, pushed: false });
+    expect(await startBoost(fetcher, 'device-1234')).toEqual({
+      ok: true,
+      boostUntil: Date.parse(until),
+      pushed: false,
+    });
+    expect(fetcher).toHaveBeenCalledWith('/api/locations/device-1234/boost', { method: 'PUT' });
+    expect(await startBoost(respond(404, {}), 'device-1234')).toEqual({
+      ok: false,
+      error: 'HTTP 404',
+    });
+  });
+
+  it('ends a boost with DELETE', async () => {
+    const fetcher = respond(204);
+    expect(await endBoost(fetcher, 'device-1234')).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith('/api/locations/device-1234/boost', { method: 'DELETE' });
+    expect(await endBoost(respond(500), 'device-1234')).toBe(false);
+  });
+
+  it('counts a boost as active only before its end', () => {
+    const boosts = new Map([['d', now + 1000]]);
+    expect(activeBoost(boosts, 'd', now)).toBe(now + 1000);
+    expect(activeBoost(boosts, 'd', now + 1000)).toBeUndefined();
+    expect(activeBoost(boosts, 'other', now)).toBeUndefined();
   });
 });

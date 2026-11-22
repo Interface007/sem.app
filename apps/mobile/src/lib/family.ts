@@ -1,4 +1,9 @@
-import { LocationList, type FamilyLocation } from '@sem/contracts';
+import {
+  LocationBoostList,
+  LocationBoostResult,
+  LocationList,
+  type FamilyLocation,
+} from '@sem/contracts';
 
 /** Positions older than this are drawn faded. */
 export const STALE_AFTER_MS = 2 * 60 * 1000;
@@ -135,4 +140,65 @@ export async function fetchLocations(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** Device id → end of its boost (epoch ms). */
+export type BoostMap = ReadonlyMap<string, number>;
+
+/**
+ * `GET /api/locations/boosts`. Any failure gives an empty map: the map stays
+ * usable, only the boost state is missing.
+ */
+export async function fetchBoosts(fetcher: (path: string) => Promise<Response>): Promise<BoostMap> {
+  try {
+    const response = await fetcher('/api/locations/boosts');
+    if (!response.ok) return new Map();
+    const parsed = LocationBoostList.safeParse(await response.json());
+    if (!parsed.success) return new Map();
+    return new Map(parsed.data.boosts.map((b) => [b.deviceId, Date.parse(b.boostUntil)]));
+  } catch {
+    return new Map();
+  }
+}
+
+export type BoostStartResult =
+  { ok: true; boostUntil: number; pushed: boolean } | { ok: false; error: string };
+
+/** `PUT /api/locations/:deviceId/boost`. */
+export async function startBoost(
+  fetcher: (path: string, init?: RequestInit) => Promise<Response>,
+  deviceId: string,
+): Promise<BoostStartResult> {
+  try {
+    const response = await fetcher(`/api/locations/${encodeURIComponent(deviceId)}/boost`, {
+      method: 'PUT',
+    });
+    if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
+    const parsed = LocationBoostResult.safeParse(await response.json());
+    if (!parsed.success) return { ok: false, error: 'invalid answer' };
+    return { ok: true, boostUntil: Date.parse(parsed.data.boostUntil), pushed: parsed.data.pushed };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** `DELETE /api/locations/:deviceId/boost`; true on success. */
+export async function endBoost(
+  fetcher: (path: string, init?: RequestInit) => Promise<Response>,
+  deviceId: string,
+): Promise<boolean> {
+  try {
+    const response = await fetcher(`/api/locations/${encodeURIComponent(deviceId)}/boost`, {
+      method: 'DELETE',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Remaining boost of a device at `now`, `undefined` if none. */
+export function activeBoost(boosts: BoostMap, deviceId: string, now: number): number | undefined {
+  const until = boosts.get(deviceId);
+  return until !== undefined && until > now ? until : undefined;
 }
