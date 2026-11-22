@@ -12,6 +12,8 @@ WORKDIR /repo
 
 FROM base AS build
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# pnpm refuses a frozen install when a patch listed in pnpm-workspace.yaml is missing.
+COPY patches patches
 COPY packages/contracts/package.json packages/contracts/
 COPY apps/server/package.json apps/server/
 RUN pnpm install --frozen-lockfile --filter @sem/server...
@@ -22,6 +24,8 @@ RUN pnpm --filter @sem/server... build \
 
 FROM base AS mobile
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# pnpm refuses a frozen install when a patch listed in pnpm-workspace.yaml is missing.
+COPY patches patches
 COPY packages/contracts/package.json packages/contracts/
 COPY apps/mobile/package.json apps/mobile/
 RUN pnpm install --frozen-lockfile --filter @sem/mobile...

@@ -8,8 +8,10 @@ import type { Config } from './config.js';
 import { SqliteSessionStore, type SessionStore } from './db/sessions.js';
 import { UnconfiguredNasGateway, type NasGateway } from './nas/index.js';
 import { maskViewerKey, registerHausRoutes } from './haus/routes.js';
+import { BoostRegistry } from './locations/boosts.js';
 import { registerLocationRoutes } from './locations/routes.js';
 import { MemoryLocationStore } from './locations/store.js';
+import { FcmPushSender, noPushSender, type PushSender } from './push/fcm.js';
 import { registerUpdateRoutes } from './updates.js';
 
 export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
@@ -25,6 +27,7 @@ export type AppConfig = Pick<Config, 'version' | 'commit' | 'webRoot'> &
       | 'hausViewerEntry'
       | 'locationMaxAgeHours'
       | 'locationFlushSeconds'
+      | 'fcmServiceAccountFile'
     >
   > & {
     logLevel?: Config['logLevel'];
@@ -36,6 +39,8 @@ export interface AppDeps {
   sessionStore?: SessionStore;
   /** Milliseconds since the epoch. */
   now?: () => number;
+  /** Delivery of boost messages; FCM if configured, otherwise none. */
+  pushSender?: PushSender;
   /** Destination of the log output; stdout if omitted. */
   logStream?: { write(message: string): void };
 }
@@ -123,7 +128,13 @@ export async function buildApp(config: AppConfig, deps: AppDeps = {}): Promise<F
     sessions,
   });
 
-  registerLocationRoutes(app, { store: locations, now });
+  const fcmFile = config.fcmServiceAccountFile;
+  const push =
+    deps.pushSender ??
+    (fcmFile === undefined
+      ? noPushSender
+      : new FcmPushSender({ serviceAccountFile: fcmFile, warn: (m) => app.log.warn(m) }));
+  registerLocationRoutes(app, { store: locations, boosts: new BoostRegistry(now), push, now });
 
   registerUpdateRoutes(app, {
     dir: config.updatesDir,

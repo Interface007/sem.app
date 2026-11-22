@@ -10,6 +10,7 @@ interface LocationRow {
   accuracy: number | null;
   recorded_at: number;
   received_at: number;
+  push_token: string | null;
 }
 
 /** Table `locations`; the schema is created by the migration in `db/sessions.ts`. */
@@ -27,14 +28,16 @@ export class SqliteLocationPersistence implements LocationPersistence {
       accuracy: row.accuracy,
       recordedAt: row.recorded_at,
       receivedAt: row.received_at,
+      pushToken: row.push_token,
     }));
   }
 
   replaceAll(locations: readonly StoredLocation[]): void {
     const insert = this.db.prepare(
       `INSERT INTO locations
-         (username, device_id, device_name, latitude, longitude, accuracy, recorded_at, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (username, device_id, device_name, latitude, longitude, accuracy, recorded_at, received_at,
+          push_token)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     this.db.exec('BEGIN');
     try {
@@ -49,6 +52,7 @@ export class SqliteLocationPersistence implements LocationPersistence {
           l.accuracy,
           l.recordedAt,
           l.receivedAt,
+          l.pushToken,
         );
       }
       this.db.exec('COMMIT');

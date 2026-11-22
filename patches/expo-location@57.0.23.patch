@@ -1,0 +1,17 @@
+diff --git a/android/src/main/java/expo/modules/location/LocationModule.kt b/android/src/main/java/expo/modules/location/LocationModule.kt
+index b286ea277f3658b62ab9fd9ed1df67359cea46fc..7a50ca99b2d2fc4517b75844c15737dcfefbcd76 100644
+--- a/android/src/main/java/expo/modules/location/LocationModule.kt
++++ b/android/src/main/java/expo/modules/location/LocationModule.kt
+@@ -323,7 +323,11 @@ class LocationModule : Module(), SensorEventListener, ActivityEventListener {
+       if (!shouldUseForegroundService && isMissingBackgroundPermissions()) {
+         throw LocationBackgroundUnauthorizedException()
+       }
+-      if (!AppForegroundedSingleton.isForegrounded && options.foregroundService != null) {
++      // sem.app patch: re-registering a running task only updates its options (setOptions keeps the
++      // running foreground service), so allow it from the background; a new start stays forbidden.
++      if (!AppForegroundedSingleton.isForegrounded && options.foregroundService != null &&
++        !mTaskManager.taskHasConsumerOfClass(taskName, LocationTaskConsumer::class.java)
++      ) {
+         throw ForegroundServiceStartNotAllowedException()
+       }
+ 

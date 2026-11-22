@@ -22,6 +22,15 @@ export interface SharingSettings {
   /** Selected send interval; missing or invalid stored values give the 10 s default. */
   getInterval(): Promise<LocationIntervalMs>;
   setInterval(interval: LocationIntervalMs): Promise<void>;
+  /** Interval the running updates were last started with; `null` if unknown. */
+  getActiveInterval(): Promise<LocationIntervalMs | null>;
+  setActiveInterval(interval: LocationIntervalMs): Promise<void>;
+  /** Epoch milliseconds until which this device is boosted; `null` if never. */
+  getBoostUntil(): Promise<number | null>;
+  setBoostUntil(until: number | null): Promise<void>;
+  /** FCM token of this installation; `null` if none could be obtained. */
+  getPushToken(): Promise<string | null>;
+  setPushToken(token: string | null): Promise<void>;
   /** Random id of this installation; created once, then stable. */
   getDeviceId(): Promise<DeviceId>;
 }
@@ -31,6 +40,14 @@ const LAST_SENT_KEY = 'sem_location_last_sent';
 const STOPPED_BY_ERROR_KEY = 'sem_location_stopped_by_error';
 const INTERVAL_KEY = 'sem_location_interval';
 const DEVICE_ID_KEY = 'sem_device_id';
+const ACTIVE_INTERVAL_KEY = 'sem_location_active_interval';
+const BOOST_UNTIL_KEY = 'sem_location_boost_until';
+const PUSH_TOKEN_KEY = 'sem_push_token';
+const NO_TOKEN = 'none';
+
+function allowedInterval(value: number): LocationIntervalMs | undefined {
+  return LOCATION_INTERVALS_MS.find((allowed) => allowed === value);
+}
 
 export function createSharingSettings(
   store: KeyValueStore,
@@ -52,11 +69,24 @@ export function createSharingSettings(
     setStoppedByError: (stopped) => store.set(STOPPED_BY_ERROR_KEY, stopped ? 'true' : 'false'),
     async getInterval() {
       const value = Number(await store.get(INTERVAL_KEY));
-      return (
-        LOCATION_INTERVALS_MS.find((allowed) => allowed === value) ?? DEFAULT_LOCATION_INTERVAL_MS
-      );
+      return allowedInterval(value) ?? DEFAULT_LOCATION_INTERVAL_MS;
     },
     setInterval: (interval) => store.set(INTERVAL_KEY, String(interval)),
+    async getActiveInterval() {
+      return allowedInterval(Number(await store.get(ACTIVE_INTERVAL_KEY))) ?? null;
+    },
+    setActiveInterval: (interval) => store.set(ACTIVE_INTERVAL_KEY, String(interval)),
+    async getBoostUntil() {
+      const value = Number(await store.get(BOOST_UNTIL_KEY));
+      return Number.isFinite(value) && value > 0 ? value : null;
+    },
+    // '0' and NO_TOKEN instead of '': stored values are never empty.
+    setBoostUntil: (until) => store.set(BOOST_UNTIL_KEY, String(until ?? 0)),
+    async getPushToken() {
+      const value = await store.get(PUSH_TOKEN_KEY);
+      return value && value !== NO_TOKEN ? value : null;
+    },
+    setPushToken: (token) => store.set(PUSH_TOKEN_KEY, token ?? NO_TOKEN),
     async getDeviceId() {
       const stored = DeviceId.safeParse(await store.get(DEVICE_ID_KEY));
       if (stored.success) return stored.data;

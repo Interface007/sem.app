@@ -1,4 +1,5 @@
 import {
+  BOOST_LOCATION_INTERVAL_MS,
   FOREGROUND_NOTIFICATION,
   LOCATION_INTERVAL_LABELS,
   type LocationIntervalMs,
@@ -34,6 +35,9 @@ export interface SharingDeps {
   api: LocationApi;
   settings: SharingSettings;
   authFetch(path: string, init?: RequestInit): Promise<Response>;
+  /** FCM token of this installation; rejects if there is none (e.g. no Firebase config). */
+  getPushToken(): Promise<string>;
+  now(): number;
 }
 
 export type EnableResult = { ok: true } | { ok: false; denied: DeniedPermission };
@@ -45,20 +49,50 @@ export interface LocationSharing {
   disable(): Promise<void>;
   /** Stores the interval; if sharing is on, restarts the updates with it (stop → start) without switching off. */
   setInterval(interval: LocationIntervalMs): Promise<void>;
+  /**
+   * Remembers the boost end and, if sharing is on and the effective interval changed,
+   * re-registers the running updates with it. Works from the background (patched
+   * expo-location); throws if the system refuses.
+   */
+  applyBoost(boostUntil: number | null): Promise<void>;
   /** App start: restarts the updates if sharing is on, the user is signed in and the task is not running. */
   resume(signedIn: boolean): Promise<void>;
   /** Before sign-out, while the token still exists: like `disable`, but only if sharing is on. */
   stopForLogout(): Promise<void>;
 }
 
-function updatesOptions(interval: LocationIntervalMs): UpdatesOptions {
+/** The boost wins while it lasts, otherwise the selected interval applies. */
+export function effectiveInterval(
+  selected: LocationIntervalMs,
+  boostUntil: number | null,
+  now: number,
+): LocationIntervalMs {
+  return boostUntil !== null && boostUntil > now ? BOOST_LOCATION_INTERVAL_MS : selected;
+}
+
+/** "14:05" in local time. */
+export function formatClock(epochMs: number): string {
+  const date = new Date(epochMs);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function notificationBody(interval: LocationIntervalMs, boostUntil: number | null): string {
+  const base = `Der Standort wird ${LOCATION_INTERVAL_LABELS[interval]} an den Familien-Server gesendet.`;
+  return boostUntil === null ? base : `Live-Verfolgung bis ${formatClock(boostUntil)}. ${base}`;
+}
+
+function updatesOptions(
+  interval: LocationIntervalMs,
+  boostUntil: number | null = null,
+): UpdatesOptions {
   return {
     timeInterval: interval,
     distanceInterval: 0,
     deferredUpdatesInterval: interval,
     foregroundService: {
       ...FOREGROUND_NOTIFICATION,
-      notificationBody: `Der Standort wird ${LOCATION_INTERVAL_LABELS[interval]} an den Familien-Server gesendet.`,
+      notificationBody: notificationBody(interval, boostUntil),
       killServiceOnDestroy: false,
     },
   };
@@ -69,7 +103,46 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown error';
 }
 
-export function createLocationSharing({ api, settings, authFetch }: SharingDeps): LocationSharing {
+export function createLocationSharing({
+  api,
+  settings,
+  authFetch,
+  getPushToken,
+  now,
+}: SharingDeps): LocationSharing {
+  /** Starts (or re-registers) the updates with the interval that applies right now. */
+  async function startEffective(): Promise<void> {
+    const boostUntil = await settings.getBoostUntil();
+    const interval = effectiveInterval(await settings.getInterval(), boostUntil, now());
+    const boosted = boostUntil !== null && boostUntil > now();
+    await api.startUpdates(updatesOptions(interval, boosted ? boostUntil : null));
+    await settings.setActiveInterval(interval);
+  }
+
+  async function applyBoost(boostUntil: number | null): Promise<void> {
+    await settings.setBoostUntil(boostUntil);
+    if (!(await settings.isEnabled())) return;
+    const selected = await settings.getInterval();
+    const target = effectiveInterval(selected, boostUntil, now());
+    // Unknown for updates started before boosts existed: those run with the selected interval.
+    if (((await settings.getActiveInterval()) ?? selected) === target) return;
+    await startEffective();
+  }
+
+  /** Never throws: without a token the device simply cannot be boosted by push. */
+  async function refreshPushToken(): Promise<void> {
+    try {
+      await settings.setPushToken(await getPushToken());
+    } catch (error) {
+      console.warn('push token unavailable', errorName(error));
+      try {
+        await settings.setPushToken(null);
+      } catch {
+        // Storage unavailable: the next start tries again.
+      }
+    }
+  }
+
   async function disable(): Promise<void> {
     try {
       await api.stopUpdates();
@@ -97,7 +170,8 @@ export function createLocationSharing({ api, settings, authFetch }: SharingDeps)
       if (!(await api.requestNotifications())) return { ok: false, denied: 'notifications' };
       if (!(await api.requestBackground())) return { ok: false, denied: 'background' };
       await settings.getDeviceId();
-      await api.startUpdates(updatesOptions(await settings.getInterval()));
+      await refreshPushToken();
+      await startEffective();
       await settings.setEnabled(true);
       await settings.setStoppedByError(false);
       return { ok: true };
@@ -107,18 +181,24 @@ export function createLocationSharing({ api, settings, authFetch }: SharingDeps)
       await settings.setInterval(interval);
       if (!(await settings.isEnabled())) return;
       await api.stopUpdates();
-      await api.startUpdates(updatesOptions(interval));
+      await startEffective();
     },
+    applyBoost,
     async resume(signedIn) {
       // Never throws: a failure here must not take the app down at start.
       try {
         if (!signedIn || !(await settings.isEnabled())) return;
-        if (await api.hasStarted()) return;
+        await refreshPushToken();
+        if (await api.hasStarted()) {
+          // A boost may have ended while no report got through.
+          await applyBoost(await settings.getBoostUntil());
+          return;
+        }
         if (!(await api.hasPermissions())) {
           await switchOffAfterFailure();
           return;
         }
-        await api.startUpdates(updatesOptions(await settings.getInterval()));
+        await startEffective();
       } catch (error) {
         console.warn('location sharing: restart failed', errorName(error));
         try {

@@ -13,12 +13,18 @@ import {
 } from 'react-native';
 import FamilyMap from '../components/FamilyMap';
 import {
+  activeBoost,
+  endBoost,
+  fetchBoosts,
   fetchLocations,
   formatAccuracy,
   formatAge,
   mapStyleUrl,
   POLL_INTERVAL_MS,
+  startBoost,
+  type BoostMap,
 } from '../lib/family';
+import { formatClock } from '../lib/location/sharing';
 import { session } from '../lib/sessionClient';
 
 type State =
@@ -32,7 +38,43 @@ export default function FamilieScreen() {
   const [state, setState] = useState<State>({ status: 'loading' });
   const [now, setNow] = useState(() => Date.now());
   const [focus, setFocus] = useState<{ deviceId: string; nonce: number } | undefined>();
+  const [boosts, setBoosts] = useState<BoostMap>(new Map());
+  const [notices, setNotices] = useState<Record<string, string>>({});
+  const [busyDevice, setBusyDevice] = useState<string | undefined>();
   const reload = useRef<() => void>(() => undefined);
+
+  const notify = (deviceId: string, text: string) =>
+    setNotices((previous) => ({ ...previous, [deviceId]: text }));
+
+  async function toggleBoost(deviceId: string, active: boolean) {
+    setBusyDevice(deviceId);
+    if (active) {
+      if (await endBoost(session.authFetch, deviceId)) {
+        setBoosts((previous) => {
+          const next = new Map(previous);
+          next.delete(deviceId);
+          return next;
+        });
+        notify(deviceId, 'Live-Verfolgung beendet.');
+      } else {
+        notify(deviceId, 'Live-Verfolgung konnte nicht beendet werden.');
+      }
+    } else {
+      const result = await startBoost(session.authFetch, deviceId);
+      if (result.ok) {
+        setBoosts((previous) => new Map(previous).set(deviceId, result.boostUntil));
+        notify(
+          deviceId,
+          result.pushed
+            ? 'Das Gerät wurde benachrichtigt.'
+            : 'Das Gerät erfährt es mit seinem nächsten Bericht.',
+        );
+      } else {
+        notify(deviceId, 'Live-Verfolgung konnte nicht gestartet werden.');
+      }
+    }
+    setBusyDevice(undefined);
+  }
 
   // Polls only while the screen has focus and the app is in the foreground.
   useFocusEffect(
@@ -41,9 +83,13 @@ export default function FamilieScreen() {
       let timer: ReturnType<typeof setInterval> | undefined;
 
       const load = async () => {
-        const result = await fetchLocations(session.authFetch);
+        const [result, nextBoosts] = await Promise.all([
+          fetchLocations(session.authFetch),
+          fetchBoosts(session.authFetch),
+        ]);
         if (!active) return;
         setNow(Date.now());
+        setBoosts(nextBoosts);
         if (result.ok) {
           setState({ status: 'ready', locations: result.locations });
         } else {
@@ -124,24 +170,42 @@ export default function FamilieScreen() {
         keyExtractor={(item) => item.deviceId}
         renderItem={({ item }) => {
           const accuracy = formatAccuracy(item.accuracy);
+          const boostUntil = activeBoost(boosts, item.deviceId, now);
+          const notice = notices[item.deviceId];
           return (
-            <Pressable
-              accessibilityRole="button"
-              testID={`family-item-${item.deviceId}`}
-              style={({ pressed }) => [styles.item, pressed && styles.pressed]}
-              onPress={() =>
-                setFocus((previous) => ({
-                  deviceId: item.deviceId,
-                  nonce: (previous?.nonce ?? 0) + 1,
-                }))
-              }
-            >
-              <Text style={styles.user}>{item.user}</Text>
-              <Text style={styles.detail}>
-                {item.deviceName} · {formatAge(item.recordedAt, now)}
-                {accuracy === undefined ? '' : ` · ${accuracy}`}
-              </Text>
-            </Pressable>
+            <View style={styles.item}>
+              <Pressable
+                accessibilityRole="button"
+                testID={`family-item-${item.deviceId}`}
+                style={({ pressed }) => pressed && styles.pressed}
+                onPress={() =>
+                  setFocus((previous) => ({
+                    deviceId: item.deviceId,
+                    nonce: (previous?.nonce ?? 0) + 1,
+                  }))
+                }
+              >
+                <Text style={styles.user}>{item.user}</Text>
+                <Text style={styles.detail}>
+                  {item.deviceName} · {formatAge(item.recordedAt, now)}
+                  {accuracy === undefined ? '' : ` · ${accuracy}`}
+                </Text>
+              </Pressable>
+              <View style={styles.boost}>
+                {boostUntil !== undefined && (
+                  <Text style={styles.live} testID={`family-boost-${item.deviceId}`}>
+                    Live bis {formatClock(boostUntil)}
+                  </Text>
+                )}
+                <Button
+                  testID={`family-boost-toggle-${item.deviceId}`}
+                  title={boostUntil === undefined ? '10 min live verfolgen' : 'Beenden'}
+                  disabled={busyDevice === item.deviceId}
+                  onPress={() => void toggleBoost(item.deviceId, boostUntil !== undefined)}
+                />
+              </View>
+              {notice !== undefined && <Text style={styles.detail}>{notice}</Text>}
+            </View>
           );
         }}
       />
@@ -161,4 +225,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   user: { fontSize: 16, fontWeight: '600' },
   detail: { color: '#555' },
+  boost: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  live: { color: '#b00020', fontWeight: '600' },
 });

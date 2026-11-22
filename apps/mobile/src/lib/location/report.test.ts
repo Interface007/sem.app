@@ -22,15 +22,17 @@ function setup(respond: () => Promise<Response> = async () => new Response(null,
   );
   const apiFetch = vi.fn<TaskDeps['apiFetch']>(respond);
   const stopUpdates = vi.fn(async () => undefined);
+  const applyBoost = vi.fn<TaskDeps['applyBoost']>(async () => undefined);
   const deps: TaskDeps = {
     apiFetch,
     getToken: async () => 'tok',
     settings,
     now: () => 1_700_000_000_000,
     stopUpdates,
+    applyBoost,
     deviceName: 'Pixel 9',
   };
-  return { deps, apiFetch, stopUpdates, settings };
+  return { deps, apiFetch, stopUpdates, applyBoost, settings };
 }
 
 function sentBody(apiFetch: ReturnType<typeof setup>['apiFetch']) {
@@ -112,5 +114,73 @@ describe('handleLocationBatch', () => {
     const { deps, apiFetch } = setup();
     await handleLocationBatch([], deps);
     expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  describe('boost', () => {
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+
+    it('sends the stored push token, or null without one', async () => {
+      const first = setup();
+      await handleLocationBatch([measured(1)], first.deps);
+      expect(sentBody(first.apiFetch).pushToken).toBeNull();
+
+      const second = setup();
+      await second.settings.setPushToken('fcm-token');
+      await handleLocationBatch([measured(1)], second.deps);
+      expect(LocationReport.parse(sentBody(second.apiFetch)).pushToken).toBe('fcm-token');
+    });
+
+    it('sends null instead of a token the contract rejects', async () => {
+      const { deps, apiFetch, settings } = setup();
+      await settings.setPushToken('x'.repeat(600));
+      await handleLocationBatch([measured(1)], deps);
+      expect(sentBody(apiFetch).pushToken).toBeNull();
+    });
+
+    it('applies the boost end from a 200 answer and records "last sent"', async () => {
+      const until = '2026-01-01T12:10:00.000Z';
+      const { deps, applyBoost, settings } = setup(async () => json({ boostUntil: until }));
+      await handleLocationBatch([measured(1)], deps);
+      expect(applyBoost).toHaveBeenCalledWith(Date.parse(until));
+      expect(await settings.getLastSentAt()).toBe(1_700_000_000_000);
+    });
+
+    it('ends the boost when the answer says null', async () => {
+      const { deps, applyBoost } = setup(async () => json({ boostUntil: null }));
+      await handleLocationBatch([measured(1)], deps);
+      expect(applyBoost).toHaveBeenCalledWith(null);
+    });
+
+    it.each([
+      ['a 204 from an older server', async () => new Response(null, { status: 204 })],
+      ['an answer that breaks the contract', async () => json({ boost: 1 })],
+      [
+        'a network error',
+        async () => {
+          throw new TypeError('Network request failed');
+        },
+      ],
+    ])('falls back to the stored boost end on %s', async (_name, respond) => {
+      const { deps, applyBoost, settings } = setup(respond);
+      await settings.setBoostUntil(1_700_000_600_000);
+      await handleLocationBatch([measured(1)], deps);
+      expect(applyBoost).toHaveBeenCalledWith(1_700_000_600_000);
+    });
+
+    it('does not switch after a 401', async () => {
+      const { deps, applyBoost } = setup(async () => new Response('{}', { status: 401 }));
+      await handleLocationBatch([measured(1)], deps);
+      expect(applyBoost).not.toHaveBeenCalled();
+    });
+
+    it('never throws when switching fails', async () => {
+      const { deps, applyBoost } = setup(async () => json({ boostUntil: null }));
+      applyBoost.mockRejectedValue(new Error('ForegroundServiceStartNotAllowedException'));
+      await expect(handleLocationBatch([measured(1)], deps)).resolves.toBeUndefined();
+    });
   });
 });

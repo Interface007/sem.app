@@ -1,2 +1,5 @@
 .expo/
 expo-env.d.ts
+
+# From the Firebase console; passed in with GOOGLE_SERVICES_FILE (docs/betrieb-nas.md).
+google-services.json

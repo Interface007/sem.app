@@ -197,6 +197,21 @@ Vorarbeiten im `home`-Repo (dort umzusetzen, nicht in sem.app):
 * Sichtbarkeit: Jeder angemeldete Benutzer sieht alle Positionen; es gibt
   keine Gruppen. Der Benutzer einer Meldung kommt immer aus der Sitzung.
 * Koordinaten erscheinen nicht im Log.
+* **Live-Verfolgung (Boost):** `PUT /api/locations/:deviceId/boost` stellt ein
+  Gerät für 10 Minuten (`BOOST_DURATION_MS`) auf 10 Sekunden,
+  `DELETE …/boost` beendet das, `GET /api/locations/boosts` listet die
+  laufenden. Boosts liegen nur im Arbeitsspeicher. Das Gerät erfährt davon
+  auf zwei Wegen: sofort per FCM-Datennachricht mit hoher Priorität, sonst
+  aus der Antwort auf seinen nächsten Bericht (`LocationReportResult`).
+  Dafür sendet die App ihr FCM-Token mit jedem Bericht (`pushToken`); der
+  Server speichert es in `locations.push_token` und gibt es nie heraus.
+  Apps ohne das Feld bekommen weiter ein leeres `204`.
+* Umschalten im Hintergrund: expo-location verbietet
+  `startLocationUpdatesAsync` mit Vordergrund-Dienst aus dem Hintergrund
+  auch dann, wenn die Aufgabe schon läuft und nur ihre Optionen ersetzt
+  würden. `patches/expo-location@57.0.23.patch` erlaubt genau diesen Fall;
+  der laufende Dienst bleibt dabei bestehen. Bei jedem Update von
+  expo-location prüfen, ob der Patch noch nötig ist und passt.
 
 ## 6. Anmeldung und Ordnerwahl
 
