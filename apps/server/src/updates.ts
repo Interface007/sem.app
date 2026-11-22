@@ -9,7 +9,7 @@ import {
   type UpdateAsset,
   type UpdateManifest,
 } from '@sem/contracts';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 export interface UpdateOptions {
   /** Output folder of `expo export`. */
@@ -137,6 +137,14 @@ function baseUrlOf(request: FastifyRequest, configured: string | undefined): str
   return configured ?? `${request.protocol}://${request.headers.host ?? request.hostname}`;
 }
 
+/**
+ * "No update" per protocol v1. expo-updates accepts a 204 only together with
+ * `expo-protocol-version: 1`; without it the check fails with "Empty body".
+ */
+function noUpdate(reply: FastifyReply): FastifyReply {
+  return reply.code(204).header('expo-protocol-version', '1').send();
+}
+
 export function registerUpdateRoutes(app: FastifyInstance, options: UpdateOptions): void {
   app.get(MANIFEST_PATH, async (request, reply) => {
     const headers = UpdateRequestHeaders.safeParse(request.headers);
@@ -144,19 +152,19 @@ export function registerUpdateRoutes(app: FastifyInstance, options: UpdateOption
       return reply.code(400).send({ error: 'Invalid update request headers' });
     }
     // Never answer without a key: an unsigned manifest must not reach the app.
-    if (!options.dir || !options.privateKeyPath) return reply.code(204).send();
+    if (!options.dir || !options.privateKeyPath) return noUpdate(reply);
 
     let key;
     try {
       key = createPrivateKey(await readFile(options.privateKeyPath));
     } catch {
       request.log.warn('update signing key missing or unreadable; serving no update');
-      return reply.code(204).send();
+      return noUpdate(reply);
     }
 
     const manifest = await buildManifest(options.dir, baseUrlOf(request, options.baseUrl));
     if (!manifest || manifest.runtimeVersion !== headers.data['expo-runtime-version']) {
-      return reply.code(204).send();
+      return noUpdate(reply);
     }
 
     const manifestJson = JSON.stringify(manifest);

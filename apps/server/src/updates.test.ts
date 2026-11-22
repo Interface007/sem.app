@@ -160,6 +160,8 @@ describe('GET /api/updates/manifest', () => {
     });
 
     expect(response.statusCode).toBe(204);
+    // expo-updates treats a 204 without this header as a failed check.
+    expect(response.headers['expo-protocol-version']).toBe('1');
     await server.close();
   });
 
@@ -172,6 +174,8 @@ describe('GET /api/updates/manifest', () => {
     });
 
     expect(response.statusCode).toBe(204);
+    // expo-updates treats a 204 without this header as a failed check.
+    expect(response.headers['expo-protocol-version']).toBe('1');
     await server.close();
   });
 
@@ -187,6 +191,8 @@ describe('GET /api/updates/manifest', () => {
     });
 
     expect(response.statusCode).toBe(204);
+    // expo-updates treats a 204 without this header as a failed check.
+    expect(response.headers['expo-protocol-version']).toBe('1');
     expect(response.body).toBe('');
     await server.close();
   });
